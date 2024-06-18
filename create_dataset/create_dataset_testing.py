@@ -1,6 +1,7 @@
 import os
+import io
 import soundfile as sf
-from datasets import DatasetDict, Audio, Features, Value
+from datasets import Dataset, DatasetDict, Audio, Features, Value
 from tqdm import tqdm
 
 # Define the path to your dataset
@@ -53,7 +54,7 @@ features = Features({
 
 # Create a DatasetDict
 dataset = DatasetDict({
-    "train": Dataset.from_dict(data, features=features)
+    "train": Dataset.from_dict({"audio": data["audio"], "transcription": data["transcription"]}, features=features)
 })
 
 # Verify the dataset
