@@ -37,20 +37,25 @@ for root, dirs, files in tqdm(os.walk(dataset_path)):
                 with open(text_path, "r", encoding="utf-8", errors="ignore") as f:
                     transcription = f.read().strip()
                 
+                # Read the raw audio file and convert it to a .wav-like array
+                array, sr = read_raw_file(audio_path, SAMPLE_RATE)
+                
                 # Append the data
-                data["audio"].append(audio_path)
+                data["audio"].append({"path": audio_path, "array": array, "sampling_rate": sr})
                 data["transcription"].append(transcription)
 
-# Define the dataset features with custom decoding function
-def decode_raw_audio(example):
-    audio_path = example["audio"]
-    array, sr = read_raw_file(audio_path, SAMPLE_RATE)
-    return {"audio": {"array": array, "sampling_rate": sr}}
-
+# Create a DatasetDict
 features = Features({
-    "audio": Audio(decode=decode_raw_audio),
+    "audio": Audio(sampling_rate=SAMPLE_RATE),
     "transcription": Value("string")
 })
+
+dataset = DatasetDict({
+    "train": Dataset.from_dict({"audio": data["audio"], "transcription": data["transcription"]})
+})
+
+# Verify the dataset
+print(dataset["train"][0])
 
 # Create a DatasetDict
 dataset = DatasetDict({
