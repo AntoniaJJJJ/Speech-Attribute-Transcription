@@ -6,19 +6,63 @@ This script reads the text and audio paths,
 create individual datasets for each split (train, valid, test), 
 and combine them into a DatasetDict.
 
+Each dataset (train, valid, test) will have the following structure:
+Dataset({
+    features: ['audio', 'text'],
+    num_rows: <number_of_rows>
+})
+
+The audio column will be of type Audio and contain the following information:
+    path: The file path to the audio file.
+    array: The actual audio data as a NumPy array (this will be loaded on demand).
+    sampling_rate: The sampling rate of the audio file.
+
+The text column will be of type string and contain the transcription corresponding to the audio.
+
 """
 from datasets import DatasetDict, Dataset, Audio
 import pandas as pd
 import os
 
 # function to read the text file
-def read_text_file(file_path):
+def read_text_file(file_path, source_name):
     with open(file_path, 'r') as f:
         # read all lines from the file into a list
         lines = f.readlines()
     # creates and returns a dictionary where the key is a identifier - first part of each line
     # the value is the text transcription
-    return {line.split(' ', 1)[0]: line.split(' ', 1)[1].strip() for line in lines}
+
+    # only cu has transcription longer than one line
+    if source_name == 'cu':
+        text_dict = {}
+        current_key = None
+        current_value = []
+
+        for line in lines:
+             # split the line into two parts: key and value
+            parts = line.split(' ', 1)
+            if len(parts) == 2:
+                if current_key is not None:
+                    # if there's a current key being processed
+                    # join the accumulated lines and add the current transcription to the dictionary
+                    text_dict[current_key] = ' '.join(current_value).strip()
+                current_key = parts[0]
+                current_value = [parts[1].strip()]
+            # if the line is a continuation of the current transcription
+            elif current_key is not None:
+                # append the line to the current value list
+                current_value.append(line.strip())
+            else:
+                print(f"Skipping line due to unexpected format: {line}")
+
+        if current_key is not None:
+            text_dict[current_key] = ' '.join(current_value).strip()
+
+        return text_dict
+    else:
+        # for the other data sources
+        return {line.split(' ', 1)[0]: line.split(' ', 1)[1].strip() for line in lines}
+
 
 # function to read the wav.scp file
 def read_wav_scp_file(file_path, source_name):
@@ -60,7 +104,7 @@ def create_dataset_dict(base_path, source_name):
     dataset_dict = {}
     for split in ['train', 'valid', 'test']:
         # constructure the paths
-        text_path = os.path.join(base_path, split, 'text')
+        texts = read_text_file(text_path, source_name)
         wav_scp_path = os.path.join(base_path, split, 'wav.scp')
         
         # read the files and store the transciption and audio path
