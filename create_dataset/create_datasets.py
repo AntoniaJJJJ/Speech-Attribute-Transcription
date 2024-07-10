@@ -24,9 +24,35 @@ def read_text_file(file_path):
 def read_wav_scp_file(file_path):
     with open(file_path, 'r') as f:
         lines = f.readlines()
-    # creates and returns a dictionary where the key is the identifier
+    # creates a dictionary where the key is the identifier
     # and the value is the audio file path
-    return {line.split(' ')[0]: line.split(' ')[1].strip() for line in lines}
+    wav_paths = {line.split(' ')[0]: line.split(' ')[1].strip() for line in lines}
+
+    # modify paths for OGI dataset
+    if source_name == 'ogi':
+        for key in wav_paths:
+            wav_paths[key] = wav_paths[key].replace(
+                "srv/scratch/z5173707/Dataset/OGI/speech/scripted",
+                "/srv/scratch/speechdata/children/TD/OGI/speech/scripted"
+            )
+    
+    # modify paths for MyST dataset
+    if source_name == 'myst':
+        for key in wav_paths:
+            wav_paths[key] = wav_paths[key].replace(
+                "/srv/scratch/z5173707/Dataset/MyST/data",
+                "/srv/scratch/speechdata/children/TD/myst-v0.3.0-171fbda/corpora/myst/data"
+            )
+    
+    # modify paths for CU dataset
+    if source_name == 'cu':
+        for key in wav_paths:
+            wav_paths[key] = wav_paths[key].replace(
+                "/srv/scratch/z5173707/Dataset/CU_2/corpus/data",
+                "/srv/scratch/speechdata/children/TD/CU_2/corpus/data"
+            )
+    
+    return wav_paths
 
 # function to create a 'DataDict' from the base path where the dataset dicectories are located
 def create_dataset_dict(base_path):
