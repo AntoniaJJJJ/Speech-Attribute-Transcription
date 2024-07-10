@@ -104,11 +104,11 @@ def create_dataset_dict(base_path, source_name):
     dataset_dict = {}
     for split in ['train', 'valid', 'test']:
         # constructure the paths
-        texts = read_text_file(text_path, source_name)
+        text_path = os.path.join(base_path, split, 'text')
         wav_scp_path = os.path.join(base_path, split, 'wav.scp')
         
         # read the files and store the transciption and audio path
-        texts = read_text_file(text_path)
+        texts = read_text_file(text_path, source_name)
         wav_paths = read_wav_scp_file(wav_scp_path, source_name)
         
         # constructs a dictionary with two lists
