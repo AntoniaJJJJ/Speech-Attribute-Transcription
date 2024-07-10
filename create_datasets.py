@@ -21,7 +21,7 @@ def read_text_file(file_path):
     return {line.split(' ', 1)[0]: line.split(' ', 1)[1].strip() for line in lines}
 
 # function to read the wav.scp file
-def read_wav_scp_file(file_path):
+def read_wav_scp_file(file_path, source_name):
     with open(file_path, 'r') as f:
         lines = f.readlines()
     # creates a dictionary where the key is the identifier
@@ -55,7 +55,7 @@ def read_wav_scp_file(file_path):
     return wav_paths
 
 # function to create a 'DataDict' from the base path where the dataset dicectories are located
-def create_dataset_dict(base_path):
+def create_dataset_dict(base_path, source_name):
     # a dictionary to store datasets for each split
     dataset_dict = {}
     for split in ['train', 'valid', 'test']:
@@ -65,7 +65,7 @@ def create_dataset_dict(base_path):
         
         # read the files and store the transciption and audio path
         texts = read_text_file(text_path)
-        wav_paths = read_wav_scp_file(wav_scp_path)
+        wav_paths = read_wav_scp_file(wav_scp_path, source_name)
         
         # constructs a dictionary with two lists
         # audio containing the audio file paths and text containing the corresponding transcriptions
@@ -98,7 +98,7 @@ save_dir = '/srv/scratch/z5369417/created_dataset_1007'
 
 # create and save a DatasetDict for each source
 for name, path in sources.items():
-    dataset_dict = create_dataset_dict(path)
+    dataset_dict = create_dataset_dict(path, name)
     save_path = os.path.join(save_dir, f'{name}_dataset')
     dataset_dict.save_to_disk(save_path)
     print(f'{name} dataset saved to {save_path}')
