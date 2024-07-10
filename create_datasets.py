@@ -40,7 +40,7 @@ def read_wav_scp_file(file_path, source_name):
     if source_name == 'myst':
         for key in wav_paths:
             wav_paths[key] = wav_paths[key].replace(
-                "/srv/scratch/z5173707/Dataset/MyST/data",
+                "/srv/scratch/z5173707/Dataset/MyST//data",
                 "/srv/scratch/speechdata/children/TD/myst-v0.3.0-171fbda/corpora/myst/data"
             )
     
