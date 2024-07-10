@@ -32,8 +32,8 @@ def read_wav_scp_file(file_path, source_name):
     if source_name == 'ogi':
         for key in wav_paths:
             wav_paths[key] = wav_paths[key].replace(
-                "srv/scratch/z5173707/Dataset/OGI/speech/scripted",
-                "/srv/scratch/speechdata/children/TD/OGI/speech/scripted"
+                "srv/scratch/z5173707/Dataset/OGI/speech",
+                "/srv/scratch/speechdata/children/TD/OGI/speech"
             )
     
     # modify paths for MyST dataset
