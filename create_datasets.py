@@ -76,7 +76,8 @@ def read_wav_scp_file(file_path, source_name):
         line = line.strip()  
         # check if the line is not empty
         if line:  
-            parts = line.split(' ', 1)
+            # split the line by any whitespace, but only into two parts
+            parts = line.split(maxsplit=1)  
             if len(parts) == 2:
                 wav_paths[parts[0]] = parts[1].strip()
             else:
