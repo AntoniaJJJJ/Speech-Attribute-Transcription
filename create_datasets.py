@@ -70,7 +70,17 @@ def read_wav_scp_file(file_path, source_name):
         lines = f.readlines()
     # creates a dictionary where the key is the identifier
     # and the value is the audio file path
-    wav_paths = {line.split(' ')[0]: line.split(' ')[1].strip() for line in lines}
+    wav_paths = {}
+    for line in lines:
+        # remove leading and trailing whitespace
+        line = line.strip()  
+        # check if the line is not empty
+        if line:  
+            parts = line.split(' ', 1)
+            if len(parts) == 2:
+                wav_paths[parts[0]] = parts[1].strip()
+            else:
+                print(f"Skipping line due to unexpected format: {line}")
 
     # modify paths for OGI dataset
     if source_name == 'ogi':
