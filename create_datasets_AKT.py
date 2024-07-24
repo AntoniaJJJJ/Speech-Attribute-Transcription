@@ -31,7 +31,6 @@ import os
 import pandas as pd
 import numpy as np
 from datasets import Dataset, Audio
-import parselmouth
 from pydub import AudioSegment
 
 # function to read CSV files and extract intervals with word annotations
