@@ -30,7 +30,7 @@ logger.addHandler(console_handler)
 
 
 @dataclass
-class DataCollatorMCTCWithPadding:
+class DataCollatorCTCWithPadding:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
@@ -55,6 +55,7 @@ class DataCollatorMCTCWithPadding:
             7.5 (Volta).
     """
 
+
     processor: Wav2Vec2Processor
     padding_features: Union[bool, str] = True
     padding_labels: Union[bool, str] = True
@@ -67,6 +68,8 @@ class DataCollatorMCTCWithPadding:
         # split inputs and labels since they have to be of different lenghts and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
+        label_features = [{"input_ids": feature["labels"]} for feature in features]
+        
         batch = self.processor.feature_extractor.pad(
             input_features,
             padding=self.padding_features,
@@ -75,69 +78,22 @@ class DataCollatorMCTCWithPadding:
             return_tensors="pt",
         )
 
-        labels_list = []
-        nGroups = len(features[0]["labels"])
-        for i in range(nGroups):
-            label_features = [{"input_ids": feature["labels"][i]} for feature in features]
-            labels_batch = self.processor.tokenizer.pad(
-                        label_features,
-                        padding=self.padding_labels,
-                        max_length=self.max_length_labels,
-                        pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                        return_tensors="pt",
-                    )
-            labels_tmp = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100).unsqueeze(dim=1)
-            labels_list.append(labels_tmp)
+        labels_batch = self.processor.pad(
+                labels=label_features,
+                padding=self.padding_labels,
+                max_length=self.max_length_labels,
+                pad_to_multiple_of=self.pad_to_multiple_of_labels,
+                return_tensors="pt",
+            )
+        
+        labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
-        batch["labels"] = torch.cat(labels_list,dim=1)
+        batch["labels"] = labels
 
         return batch
 
 
-
-class SCTCTrainer(Trainer):
-    def __init__(self, **kargs):
-        self.group_ids = kargs.pop('group_ids') #List with number of items in each group
-        super(SCTCTrainer, self).__init__(**kargs)
-
-    def compute_loss(self, model, inputs, return_outputs=False):
-        labels = inputs.get("labels")
-        outputs = model(inputs.get('input_values'))
-        logits = outputs.get('logits')
-        ngroups = len(self.group_ids)
-        #first two tokens (0,1) for <pad> and <unk>
-        assert labels.dim() == 3, "in multi-label 3D tensor is expected"
-        assert ngroups == labels.size()[1], "Second dim should match number of groups"
-
-        #IMPORTANT 0 reserved to <pad>  shared among all groups #VALIDATE THIS?!
-        #IMPORTANT STARTING FROM 1, 1:1+n IS THE n ELEMENTS in FIRST GROUP and from 1+n:1+n+m IS THE M ELEMENTS IN SECOND GROUP
-        #start_indx = 1 #0  for <pad>
-        all_losses = []
-        for i in range(ngroups):
-            mask = torch.zeros(logits.size()[2], dtype = torch.bool)
-            mask[0] = True
-            mask[list(self.group_ids[i].keys())] = True
-
-
-            targets = labels[:,i,:].squeeze()
-            g_logits = logits[:,:,mask]
-            log_probs = nn.functional.log_softmax(g_logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            #Label padding = -100
-            labels_mask = targets >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = targets.masked_select(labels_mask)
-            flattened_targets = flattened_targets.cpu().apply_(lambda x: self.group_ids[i][x]) #So all targets will start from index 1
-            flattened_targets = flattened_targets.to(self.args.device)
-            input_lengths = model._get_feat_extract_output_lengths(torch.ones_like(inputs.get('input_values'),dtype=torch.int32).sum(-1))
-            loss = F.ctc_loss(log_probs, flattened_targets, input_lengths, target_lengths, blank=model.config.pad_token_id, zero_infinity=model.config.ctc_zero_infinity, reduction=model.config.ctc_loss_reduction)
-            all_losses.append(loss)
-        sctc_loss = sum(all_losses) #TODO: consider average over number of groups NOT VALID
-        #TODO: consider reduction over input_lengths*target_lengths
-        return (sctc_loss, outputs) if return_outputs else sctc_loss
-
-
-class TrainSAModel():
+class TrainPhModel():
     def __init__(self, config_file):
         # Read YAML file
         logger.info('Init Object')
@@ -172,10 +128,11 @@ class TrainSAModel():
         self.validation_part = [x.strip() for x in config['datasets']['validation_part'].split(',')]
         self.test_part = [x.strip() for x in config['datasets']['test_part'].split(',')]
         self.cache_dir = config['datasets']['cache_dir']
+        self.phoneme_list_file = config['datasets']['phoneme_list_file']
 
-        self.attribute_list_file = config['phonological']['attribute_list_file']
-        self.phoneme2att_map_file = config['phonological']['phoneme2att_map_file']
-        self.phonetic_alphabet = config['phonological']['phonetic_alphabet']
+        #self.attribute_list_file = config['phonological']['attribute_list_file']
+        #self.phoneme2att_map_file = config['phonological']['phoneme2att_map_file']
+        #self.phonetic_alphabet = config['phonological']['phonetic_alphabet']
 
         self.sampling_rate = config['preprocessor']['sampling_rate']
         self.do_normalize = config['preprocessor']['do_normalize']
@@ -215,69 +172,18 @@ class TrainSAModel():
         self.auto_eval = config['evaluation']['auto_eval']
         self.eval_extra_data_phoneme_col = config['evaluation'].get('eval_extra_data_phoneme_col', self.phoneme_column)
 
-        
-    def load_attribute_list(self):
+        #Load Phoneme List File
         try:
-            with open(self.attribute_list_file) as f:
-                self.list_att = f.read().splitlines()
+            with open(self.phoneme_list_file,'r') as f:
+                self.phoneme_list = f.read().splitlines()
         except FileNotFoundError:
-            logger.error(f'{self.attribute_list_file} is not found')
-            raise FileNotFoundError(
-                f"The list of attribute file {self.attribute_list_file} is not found" 
-            )
-    def load_p2a_map(self):
-        try:
-            with open(self.phoneme2att_map_file) as f:
-                self.df_p2a = pd.read_csv(self.phoneme2att_map_file)
-        except FileNotFoundError:
-            logger.error(f'{self.phoneme2att_map_file} is not found')
-            raise FileNotFoundError(
-                f"The phoneme to attribute map file {self.phoneme2att_map_file} is not found" 
-            )
-        #Check all attributes are exists in the csv file
-        if not set(self.list_att).issubset(set(self.df_p2a.columns)):
-            logger.warning('Missing attributes in the phoneme2att map file')
-            miss_attribute = set(self.list_att) - set(self.df_p2a.columns)
-            logger.warning(f"The following attributes will be removed from the training {','.join(miss_attribute)}")
+            logger.error(f'Phoneme list file {self.phoneme_list_file} not exist')
+            raise
+        self.metric = evaluate.load(self.metric_path)
 
-    #For each attribute create two symbols, p_att, n_att added in one group
-    def create_binary_groups(self):
-        self.groups = []
-        for att in self.list_att:
-            binary_att = [f'p_{att}',f'n_{att}'] #Each attribute could be +ve or -ve 
-            self.groups.append(binary_att)
-
-    #Map each phoneme to either n_att or p_att
-    def create_phoneme_binary_mappers(self):
-        self.phoneme_binary_mappers = []
-        for g in self.groups:
-            p2att = {}
-            att = g[0].split('_')[1] #First one is 'p_att'
-            p_att_phs = self.df_p2a[self.df_p2a[att]==1].index
-            n_att_phs = self.df_p2a[self.df_p2a[att]==0].index
-            for idx in p_att_phs:
-                ph = self.df_p2a.iloc[idx][f'Phoneme_{self.phonetic_alphabet}']
-                p2att[ph] = f'p_{att}'
-            for idx in n_att_phs:
-                ph = self.df_p2a.iloc[idx][f'Phoneme_{self.phonetic_alphabet}']
-                p2att[ph] = f'n_{att}'
-            self.phoneme_binary_mappers.append(p2att)
-
-    #As we train a single model for all the attributes then at the inference time we separate them into groups
-    #each with just p_att, n_att then there are two indexes for each symbol, global index used in training
-    #and local index used in the inference time. This function maps each symbol either to the global index if bTraining=True
-    #or local index if bTraining = False
-    def get_att_group_indx_map(self,bTraining=True):
-        #Get group ids dictionary
-        group_ids = [sorted(self.processor.tokenizer.convert_tokens_to_ids(group)) for group in self.groups]
-        if bTraining:
-            group_ids = [dict([(x[1],x[0]+1) for x in list(enumerate(g))]) for g in group_ids]
-        else:
-            group_ids = [dict([(x[0]+1,x[1]) for x in list(enumerate(g))]) for g in group_ids]
-        return group_ids
         
     def create_processor(self):
-        vocab_list = list(chain(*self.groups))
+        vocab_list = self.phoneme_list
         vocab_dict = {v: k+1 for k, v in enumerate(vocab_list)}
         vocab_dict['<pad>'] = 0
         vocab_dict = dict(sorted(vocab_dict.items(), key= lambda x: x[1]))
@@ -290,20 +196,6 @@ class TrainSAModel():
         self.processor = Wav2Vec2Processor(feature_extractor=self.feature_extractor, tokenizer=self.tokenizer)
 
 
-    def _create_att_targets(self, batch): #Could be dp or sb
-        def mapToken(phList, mappers=self.phoneme_binary_mappers):
-            g_labels = []
-            for mapper in mappers:
-                g_label = []
-                for p in phList.split():
-                    assert p in mapper, "{0} not in mapper".format(p)
-                    g_label.append(mapper[p])
-                g_labels.append(' '.join(g_label))
-            return g_labels
-        batch["target_text"] = list(map(mapToken, batch[self.phoneme_column]))
-        return batch
-
-
     #Should run with batched=True
     def _prepare_dataset(self, batch):
         # check that all files have the same sampling rate
@@ -312,25 +204,26 @@ class TrainSAModel():
             len(sampling_rates) == 1 and list(sampling_rates)[0] == 16000
         ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
     
-        def processPerGroup(item):
-           #I did this because using just tokenizer(item) interpret "semivowel" to two tokens, semivowel and vowel
-           #TODO use unique name and not part of each other
-           labels = self.processor.tokenizer([t.split() for t in item], is_split_into_words=True).input_ids
-           return labels
-    
         batch["input_values"] = self.processor(audio=[i['array'] for i in batch['audio']], sampling_rate=batch['audio'][0]["sampling_rate"]).input_values
 
-        batch["labels"] = list(map(processPerGroup, batch["target_text"]))
+        batch["labels"] = self.processor(text=batch[self.phoneme_column]).input_ids
         return batch
 
     def _load_diphthongs_to_monophthongs_map(self):
         with open(self.diphthongs_to_monophthongs_map_file, 'r') as f:
             self.diphthongs_to_monophthongs_map = dict([(x.split(',')[0], ' '.join(x.split(',')[1:])) for x in f.read().splitlines()])
-        
-    def _decouple_diphthongs(self, batch):
-        pattern = r'|'.join([f'\\b{x}\\b' for x in self.diphthongs_to_monophthongs_map.keys()])
-        batch[self.phoneme_column] = re.sub(pattern, lambda x: x.group(0).replace(x.group(0).strip(),self.diphthongs_to_monophthongs_map[x.group(0).strip()]), batch[self.phoneme_column])
+            self.monophthongs_to_diphthongs_map = dict([(v,k) for k,v in self.diphthongs_to_monophthongs_map.items()])
+    
+
+    def _process_diphthongs(self,batch, phoneme_column, decouple=True):
+        if decouple:
+            mapper = self.diphthongs_to_monophthongs_map
+        else:
+            mapper = self.monophthongs_to_diphthongs_map                                                     
+        pattern = r'|'.join([f'\\b{x}\\b' for x in mapper.keys()])
+        batch[phoneme_column] = re.sub(pattern, lambda x: x.group(0).replace(x.group(0).strip(),mapper[x.group(0).strip()]), batch[phoneme_column])
         return batch
+
 
     def load_data(self):
         #TODO if data is dataset and not dictdataset use automatic train,test,valid split
@@ -433,16 +326,29 @@ class TrainSAModel():
             else:
                 logger.error("decouple_diphthongs is set to True but to mapping file is provided, please explicitly set decouple_diphthongs to False or provide a mapping file in diphthongs_to_monophthongs_map_file")
                 raise FileNotFoundError
-            data = data.map(self._decouple_diphthongs, batched=False)
+            data = data.map(self._process_diphthongs, batched=False, fn_kwargs={'phoneme_column':self.phoneme_column, 'decouple':True}, load_from_cache_file=False)
         
-        data = data.map(self._create_att_targets, batched=True, batch_size=8, num_proc=self.num_proc)
         if bTraining:
             data = data.map(self._prepare_dataset, remove_columns=data.column_names, batch_size=8, num_proc=self.num_proc, batched=True)
         
         return data
 
     def prepare_trainer(self):
-        self.data_collator = DataCollatorMCTCWithPadding(processor=self.processor, padding_labels=True, max_length_labels=None)
+
+        def _compute_metrics(pred):
+            pred_logits = pred.predictions
+            pred_ids = np.argmax(pred_logits, axis=-1)
+        
+            pred.label_ids[pred.label_ids == -100] = self.processor.tokenizer.pad_token_id
+        
+            pred_str = self.processor.batch_decode(pred_ids, spaces_between_special_tokens=self.spaces_between_special_tokens)
+            label_str = self.processor.batch_decode(pred.label_ids, spaces_between_special_tokens=self.spaces_between_special_tokens)
+        
+            per = self.metric.compute(predictions=pred_str, references=label_str)
+            return {"wer": per}
+
+        
+        self.data_collator = DataCollatorCTCWithPadding(processor=self.processor, padding_labels=True, max_length_labels=None)
         self.model = Wav2Vec2ForCTC.from_pretrained(
             self.model_path,
             gradient_checkpointing=self.gradient_checkpointing,
@@ -472,12 +378,11 @@ class TrainSAModel():
           save_total_limit=self.save_total_limit,
         )
 
-        self.trainer = SCTCTrainer(
+        self.trainer = Trainer(
             model=self.model,
-            group_ids=self.get_att_group_indx_map(bTraining=True),
             data_collator=self.data_collator,
             args=self.training_args,
-            #compute_metrics=compute_metrics, #Need to be added
+            compute_metrics=_compute_metrics, 
             train_dataset=self.data_train,
             eval_dataset=self.data_valid,
             tokenizer=self.processor.feature_extractor,
@@ -489,18 +394,14 @@ class TrainSAModel():
         self.processor.save_pretrained(self.saved_model_path)
 
 
-    def train_SA_model(self, resume_from_checkpoint=False):
-        self.load_attribute_list()
-        self.load_p2a_map()
-        self.create_binary_groups()
-        self.create_phoneme_binary_mappers()
+    def train_model(self, resume_from_checkpoint=False):
         self.create_processor()
         self.load_data()
         self.prepare_trainer()
         self.trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         self.save_model()
         if self.auto_eval:
-            self.evaluate_SA_model()
+            self.evaluate_model()
 
     def map_to_result(self, batch):
         input_values = self.processor(
@@ -511,29 +412,17 @@ class TrainSAModel():
         with torch.no_grad():
             logits = self.model(input_values).logits
     
-        start_indx = 1
-        pred = []
-        group_ids = self.get_att_group_indx_map(bTraining=False)
-        for i in range(len(group_ids)):
-            mask = torch.zeros(logits.size()[2], dtype = torch.bool)
-            mask[0] = True
-            mask[list(group_ids[i].values())] = True
-            logits_g = logits[:,:,mask]
-            pred_ids = torch.argmax(logits_g,dim=-1)
-            #pred_ids[pred_ids>0] += start_indx - 1
-            #start_indx += utils.number_items_per_group[i]
-            pred_ids = pred_ids.cpu().apply_(lambda x: group_ids[i].get(x,x))
-            pred.append(self.processor.batch_decode(pred_ids,spaces_between_special_tokens=self.spaces_between_special_tokens)[0])
-
-        batch["pred_str"] = pred
+        pred_ids = torch.argmax(logits, dim=-1)
+        batch["pred_str"] = self.processor.batch_decode(pred_ids,spaces_between_special_tokens=True)[0]
     
         return batch
         
-    def evaluate_SA_model(self,
+    def evaluate_model(self,
                           eval_data=None,
                           eval_parts=None,
                           suffix=None,
-                          phoneme_column=None):
+                          phoneme_column=None,
+                          decouple_diph=None):
         
         #Load the model and processor deafult at working_dir/fine_tune/best could be overridden from the yaml file by setting 
         #value for evaluation->trained_model_path
@@ -543,11 +432,6 @@ class TrainSAModel():
 
         self.model.eval()
         #self.model.to(self.device)
-        
-        self.load_attribute_list()
-        self.load_p2a_map()
-        self.create_binary_groups()
-        self.create_phoneme_binary_mappers()
         
         test_data_loaded = False
         
@@ -610,29 +494,28 @@ class TrainSAModel():
                 suffix = '_'.join(self.data_test.keys()) if isdict else 'testset'
             
             self.results = self.data_test.map(self.map_to_result, batched=False, load_from_cache_file=False)
+            if decouple_diph!= None:
+                self._load_diphthongs_to_monophthongs_map()
+                for col in ["pred_str", self.phoneme_column]:
+                    self.results = self.results.map(self._process_diphthongs, fn_kwargs={'phoneme_column':col,'decouple':decouple_diph}, load_from_cache_file=False)
+
             self.results.save_to_disk(join(self.working_dir,f"results_{suffix}.db"))
     
-            metric = evaluate.load(self.metric_path)
+            #metric = evaluate.load(self.metric_path)
             
-            ngroups = len(self.groups)
+            
             with open(join(self.working_dir,f"results_{suffix}.txt"),'w') as f:
                 if isdict:
                     for dataset in self.results:
-                        for g in range(ngroups):
-                            pred = [item[g] for item in self.results[dataset]['pred_str']]
-                            target = [item[g] for item in self.results[dataset]['target_text']]
-                            print("{} group {} AER: {:.5f}".format(dataset,self.groups[g][0].replace('p_',''),metric.compute(predictions=pred, references=target)),file=f)
+                        print("Test PER: {:.3f}".format(self.metric.compute(predictions=self.results[dataset]["pred_str"], references=self.results[dataset][self.phoneme_column])),file=f)
                 else:
-                    for g in range(ngroups):
-                        pred = [item[g] for item in self.results['pred_str']]
-                        target = [item[g] for item in self.results['target_text']]
-                        print("Test group {} AER: {:.5f}".format(self.groups[g][0].replace('p_',''),metric.compute(predictions=pred, references=target)),file=f)
+                    print("Test PER: {:.3f}".format(self.metric.compute(predictions=self.results["pred_str"], references=self.results[self.phoneme_column])),file=f)
             logger.info(f'Results dataset saved in {join(self.working_dir,f"results_{suffix}.db")} and the results saved in {join(self.working_dir,f"results_{suffix}.txt")}')
         
 
 
 def main():
-    fire.Fire(TrainSAModel)
+    fire.Fire(TrainPhModel)
 
 if __name__ == '__main__':
     main()
