@@ -1,13 +1,13 @@
 datasets:
-    data_path: '/g/data/iv96/mostafa/datasets/CV_en_split_cmu_dp' #should be a DatasetDict
-    train_part: 'train.10'
-    validation_part: 'validation'
-    test_part: 'test,validation' #, test.other'
-    cache_dir: '/scratch/iv96/ms4470/.cache/'
+    data_path: '/scratch/iv96/aj4531/outputs/phonemization/cmu_phonemizer/cu' #should be a DatasetDict
+    train_part: 'train'
+    validation_part: 'valid'
+    test_part: 'test,valid' #, test.other'
+    cache_dir: '/scratch/iv96/aj4531/.cache/'
 
 phonological:
-    attribute_list_file: 'data/list_attributes-ipa.txt'
-    phoneme2att_map_file: 'data/Phoneme2att_ipa_att_noDiph.csv'
+    attribute_list_file: 'data/list_attributes-camb.txt'
+    phoneme2att_map_file: 'data/Phoneme2att_camb_att_noDiph.csv'
     phonetic_alphabet: 'arpa' #Should be column name in phoneme2att_map_file named as "Phoneme_{phonetic_alphabet}"
 
 preprocessor:
@@ -52,4 +52,4 @@ evaluation:
 
 
 output:
-        working_dir: '/g/data/iv96/mostafa/Speech-Attribute-Transcription/working/exp38'
+        working_dir: '/scratch/iv96/aj4531/outputs/train/cu/exp1'
