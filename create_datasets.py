@@ -1,14 +1,29 @@
 """
 Author: Antonia Jian
-Date(Last modified): 10/07/2024
+Date(Last modified): 08/08/2024
 Description: 
 This script reads the text and audio paths, 
 create individual datasets for each split (train, valid, test), 
 and combine them into a DatasetDict.
 
+DatasetDict({
+    train: Dataset({
+        features: ['audio', 'text', 'speaker_id', 'age'],
+        num_rows: <number_of_rows>
+    }),
+    valid: Dataset({
+        features: ['audio', 'text', 'speaker_id', 'age'],
+        num_rows: <number_of_rows>
+    }),
+    test: Dataset({
+        features: ['audio', 'text', 'speaker_id', 'age'],
+        num_rows: <number_of_rows>
+    })
+})
+
 Each dataset (train, valid, test) will have the following structure:
 Dataset({
-    features: ['audio', 'text'],
+    features: ['audio', 'text', 'speaker_id', 'age'],
     num_rows: <number_of_rows>
 })
 
@@ -109,6 +124,16 @@ def read_wav_scp_file(file_path, source_name):
     
     return wav_paths
 
+# Function to load mapping files for speaker ID and age
+def load_mapping(file_path):
+    mapping = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            parts = line.strip().split()
+            if len(parts) == 2:
+                mapping[parts[0]] = parts[1]
+    return mapping
+
 # function to create a 'DataDict' from the base path where the dataset dicectories are located
 def create_dataset_dict(base_path, source_name):
     # a dictionary to store datasets for each split
@@ -126,7 +151,9 @@ def create_dataset_dict(base_path, source_name):
         # audio containing the audio file paths and text containing the corresponding transcriptions
         data = {
             'audio': [wav_paths[key] for key in texts.keys()],
-            'text': [texts[key] for key in texts.keys()]
+            'text': [texts[key] for key in texts.keys()],
+            'speaker_id': [speaker_id_mapping[source_name].get(key, None) for key in texts.keys()],
+            'age': [age_mapping[source_name].get(key, None) if source_name in ['cu', 'ogi'] else None for key in texts.keys()]
         }
         
         # creates a pandas DataFrame from the data dictionary
@@ -141,6 +168,17 @@ def create_dataset_dict(base_path, source_name):
     # returns a DatasetDict created from the dataset_dict
     return DatasetDict(dataset_dict)
 
+# Load speaker ID and age mappings
+speaker_id_mapping = {
+    'cu': load_mapping('/srv/scratch/z5369417/speakers_info/utt2spk_cu'),
+    'myst': load_mapping('/srv/scratch/z5369417/speakers_info/utt2spk_myst'),
+    'ogi': load_mapping('/srv/scratch/z5369417/speakers_info/utt2spk_ogi')
+}
+age_mapping = {
+    'cu': load_mapping('/srv/scratch/z5369417/speakers_info/utt2age_cu'),
+    'ogi': load_mapping('/srv/scratch/z5369417/speakers_info/utt2age_ogi')
+}
+
 # paths to the three sources
 sources = {
     'ogi': '/srv/scratch/z5369417/children_text_data/ogi',
@@ -149,7 +187,7 @@ sources = {
 }
 
 # path to save the created dataset dictionaries
-save_dir = '/srv/scratch/z5369417/created_dataset_1007'
+save_dir = '/srv/scratch/z5369417/created_dataset_0808'
 
 # create and save a DatasetDict for each source
 for name, path in sources.items():
