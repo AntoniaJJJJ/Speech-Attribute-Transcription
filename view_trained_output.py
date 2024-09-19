@@ -11,19 +11,23 @@ try:
     valid_dataset = load_from_disk(valid_data_path)
     test_dataset = load_from_disk(test_data_path)
     
-    # Define the output text file
-    output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp2/results_test_valid.db/data_after_training.txt'  
+    # Define the output text files
+    valid_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp2/results_test_valid.db/valid_after_training.txt' 
+    test_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp2/results_test_valid.db/test_after_training.txt' 
 
-    with open(output_file_path, 'w') as file:
-        file.write("VALID DATASET:\n")
+    # Write the 'valid' dataset to a text file
+    with open(valid_output_file_path, 'w') as valid_file:
+        valid_file.write("VALID DATASET:\n")
         for idx, example in enumerate(valid_dataset):
-            file.write(f"Example {idx}:\n{example}\n\n")
-        
-        file.write("\nTEST DATASET:\n")
+            valid_file.write(f"Example {idx}:\n{example}\n\n")
+    
+    # Write the 'test' dataset to a text file
+    with open(test_output_file_path, 'w') as test_file:
+        test_file.write("TEST DATASET:\n")
         for idx, example in enumerate(test_dataset):
-            file.write(f"Example {idx}:\n{example}\n\n")
+            test_file.write(f"Example {idx}:\n{example}\n\n")
 
-    print(f"Data successfully written to {output_file_path}")
+    print(f"Data successfully written to {valid_output_file_path} and {test_output_file_path}")
 
 except Exception as e:
     print(f"An error occurred while loading the datasets: {e}")
