@@ -1,8 +1,8 @@
 datasets:
-    data_path: '/srv/scratch/z5369417/outputs/phonemization2_remove/cu' #should be a DatasetDict
-    train_part: 'train_3hrs'
-    validation_part: 'valid_3hrs'
-    test_part: 'test_3hrs,valid_3hrs' #, test.other'
+    data_path: '/srv/scratch/z5369417/outputs/phonemization2_remove/cu_3hrs' #should be a DatasetDict
+    train_part: 'train'
+    validation_part: 'valid'
+    test_part: 'test,valid' #, test.other'
     cache_dir: '/home/z5369417/.cache'
 
 phonological:
