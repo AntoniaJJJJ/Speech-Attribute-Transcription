@@ -1,8 +1,8 @@
 datasets:
     data_path: '/srv/scratch/z5369417/outputs/phonemization2_remove/timit' #should be a DatasetDict
     train_part: 'train'
-    validation_part: 'valid'
-    test_part: 'test,valid' #, test.other'
+    validation_part: 'test'
+    test_part: 'test,test' #, test.other'
     cache_dir: '/home/z5369417/.cache'
 
 phonological:
