@@ -100,7 +100,7 @@ age_mapping = {
 }
 
 # Base path for CU data
-cu_base_path = '/srv/scratch/z5369417/children_text_data/cu_exclude_noise'
+cu_base_path = '/srv/scratch/z5369417/children_text_data/cu'
 cu_dataset_dict = create_cu_dataset(cu_base_path)
 
 # Save the created dataset
