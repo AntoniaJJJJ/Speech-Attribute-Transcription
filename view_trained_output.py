@@ -2,7 +2,7 @@ import os
 from datasets import load_from_disk
 
 # Define the path to the dataset folders
-result_db_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp4/results_test_valid.db' 
+result_db_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp9/results_test_valid.db' 
 valid_data_path = os.path.join(result_db_path, 'valid')
 test_data_path = os.path.join(result_db_path, 'test')
 
@@ -12,8 +12,8 @@ try:
     test_dataset = load_from_disk(test_data_path)
     
     # Define the output text files
-    valid_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp4/results_test_valid.db/valid_after_training.txt' 
-    test_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp4/results_test_valid.db/test_after_training.txt' 
+    valid_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp9/results_test_valid.db/valid_after_training.txt' 
+    test_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp9/results_test_valid.db/test_after_training.txt' 
 
     # Write the 'valid' dataset to a text file
     with open(valid_output_file_path, 'w') as valid_file:
