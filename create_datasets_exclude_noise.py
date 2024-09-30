@@ -55,6 +55,16 @@ def read_wav_scp_file(file_path):
 
     return wav_paths
 
+# Function to load mapping files for speaker ID and age
+def load_mapping(file_path):
+    mapping = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            parts = line.strip().split()
+            if len(parts) == 2:
+                mapping[parts[0]] = parts[1]
+    return mapping
+
 # Function to create the CU dataset excluding <noise> pairs
 def create_cu_dataset(base_path):
     dataset_dict = {}
