@@ -14,8 +14,11 @@ def load_partial_arrow_files(arrow_files_dir):
     all_data = []
     for arrow_file in arrow_files:
         file_path = os.path.join(arrow_files_dir, arrow_file)
-        table = pq.read_table(file_path)
-        all_data.append(table)
+        try:
+            table = pq.read_table(file_path)
+            all_data.append(table)
+        except Exception as e:
+            print(f"Error loading {arrow_file}: {e}")  # Skip corrupted files
 
     # Concatenate all tables into a single table
     if all_data:
@@ -31,7 +34,7 @@ def load_partial_arrow_files(arrow_files_dir):
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
             print(df.to_string(index=False))
     else:
-        print("No data found in the specified directory.")
+        print("No valid data found in the specified directory.")
 
 # Call the function to load and view partial data
 load_partial_arrow_files(arrow_files_dir)
