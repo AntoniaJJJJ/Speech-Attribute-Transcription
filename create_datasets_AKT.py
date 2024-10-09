@@ -100,7 +100,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
 
     # Build the dataset for each audio segment with demographic info
     data = {
-        "audio": [segment["audio"] for segment in audio_segments],
+        "audio": [Audio(sampling_rate=segment["audio"]["sampling_rate"], path=wav_path) for segment in audio_segments],
         "text": [segment["text"] for segment in audio_segments],
         "speaker_id": [speaker_id] * len(audio_segments),
         "age": [age] * len(audio_segments),
@@ -127,8 +127,6 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir):
     common_files = set(wav_files.keys()).intersection(csv_files.keys())
     all_datasets = []
 
-    # Add a debug print to check if common files are found
-    print(f"Matched files: {common_files}")
 
     # Process matching wav and csv files
     for file in common_files:
