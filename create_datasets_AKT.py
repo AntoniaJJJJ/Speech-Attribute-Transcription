@@ -100,7 +100,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
 
     # Build the dataset for each audio segment with demographic info
     data = {
-        "audio": [Audio(sampling_rate=segment["audio"]["sampling_rate"], path=wav_path) for segment in audio_segments],
+        "audio": [wav_path] * len(audio_segments),  # Provide the path to the wav file
         "text": [segment["text"] for segment in audio_segments],
         "speaker_id": [speaker_id] * len(audio_segments),
         "age": [age] * len(audio_segments),
@@ -109,6 +109,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
 
     # Create a Hugging Face Dataset object from the dictionary
     dataset = Dataset.from_dict(data)
+    dataset = dataset.cast_column("audio", Audio())  # Tell datasets to treat 'audio' as an Audio feature
     return dataset
 
 # Main function to create the DatasetDict for AKT data
