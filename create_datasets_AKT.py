@@ -119,12 +119,9 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir):
 
     # Create dictionaries to hold paths of wav and csv files, adjusting names
     wav_files = {os.path.splitext(f)[0].replace('_task1', ''): os.path.join(data_dir, f) 
-                 for f in os.listdir(data_dir) if f.endswith('_task1.wav')}
-    csv_files = {os.path.splitext(f)[0].replace('_kaldi', ''): os.path.join(data_dir, f) 
-                 for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv')}
-    
-    # Check the files present in the directory
-    print("Available files in data directory:", os.listdir(data_dir))   
+             for f in os.listdir(data_dir) if f.endswith('_task1.wav')}
+    csv_files = {os.path.splitext(f)[0].replace('_task1_kaldi', ''): os.path.join(data_dir, f) 
+             for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv') and not f.endswith('_log.csv')}
 
     # Find common base names between wav and csv files
     common_files = set(wav_files.keys()).intersection(csv_files.keys())
