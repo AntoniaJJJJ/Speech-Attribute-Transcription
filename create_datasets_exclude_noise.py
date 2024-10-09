@@ -96,7 +96,7 @@ def load_mapping(file_path):
     return mapping
 
 # function to create a 'DataDict' from the base path where the dataset dicectories are located
-def create_dataset_dict(base_path, source_name):
+def create_dataset_dict(base_path, source_name, speaker_id_mapping, age_mapping):
     # a dictionary to store datasets for each split
     dataset_dict = {}
     for split in ['train', 'valid', 'test']:
@@ -156,7 +156,7 @@ def process_dataset():
     base_path = sources[dataset_name]
     
     # Create and save the dataset
-    dataset_dict = create_dataset_dict(base_path, dataset_name)
+    dataset_dict = create_dataset_dict(base_path, dataset_name, speaker_id_mapping, age_mapping)
     # Define the folder structure
     save_dir = f'/srv/scratch/z5369417/created_dataset_3009/{dataset_name}_exclude_noise'
     
