@@ -162,7 +162,7 @@ def create_dataset_AKT_train(data_dir, demographic_csv, output_dir, max_rows=100
         print("No valid datasets were created.")
 
 
-data_directory = "/srv/scratch/z5369417/created_dataset_0808/AKT_data"  # Both CSV and WAV files are in the same folder
+data_directory = "/srv/scratch/z5369417/AKT_data"  # Both CSV and WAV files are in the same folder
 demographic_csv = "/srv/scratch/z5369417/AKT_data_processing/AKT_demographic.csv"
 output_directory = "/srv/scratch/z5369417/created_dataset_0808/AKT_dataset_limit"
 # Create and save the dataset, limiting to 1000 rows
