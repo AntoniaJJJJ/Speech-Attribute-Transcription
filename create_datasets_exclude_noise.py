@@ -163,10 +163,10 @@ def process_dataset():
     # Ensure directory exists
     os.makedirs(save_dir, exist_ok=True)
     
-    save_path = os.path.join(save_dir, f'{dataset_name}_dataset')
-    dataset_dict.save_to_disk(save_path)
 
-    print(f'{dataset_name} dataset saved to {save_path}')
+    dataset_dict.save_to_disk(save_dir)
+
+    print(f'{dataset_name} dataset saved to {save_dir}')
 
 if __name__ == '__main__':
     process_dataset()
