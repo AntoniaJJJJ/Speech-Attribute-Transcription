@@ -40,6 +40,7 @@ import os
 import pandas as pd
 import numpy as np
 from datasets import DatasetDict, Dataset, Audio
+from datasets import concatenate_datasets
 from pydub import AudioSegment
 
 # Load demographic data (SpeakerID, Age, Gender) for AKT
@@ -135,7 +136,7 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir):
         all_datasets.append(dataset)
 
     # Combine all datasets into a single dataset for the 'train' split
-    train_dataset = Dataset.from_concat(all_datasets)
+    train_dataset = concatenate_datasets(all_datasets)
 
     # Create a DatasetDict with 'train' split
     dataset_dict = DatasetDict({"train": train_dataset})
