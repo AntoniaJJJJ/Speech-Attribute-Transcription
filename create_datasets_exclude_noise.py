@@ -18,32 +18,40 @@ def parse_arguments():
     return args
 
 # Function to read the text file and filter out lines containing "<noise>"
-def read_text_file(file_path):
+def read_text_file(file_path, dataset_name):
     with open(file_path, 'r') as f:
         lines = f.readlines()
+    
+    # Handle 'cu' dataset with multi-line transcriptions
+    if dataset_name == 'cu':
+        text_dict = {}
+        current_key = None
+        current_value = []
 
-    text_dict = {}
-    current_key = None
-    current_value = []
+        for line in lines:
+            parts = line.split(' ', 1)
+            if len(parts) == 2:
+                if current_key is not None and '<noise>' not in ' '.join(current_value).strip():
+                    text_dict[current_key] = ' '.join(current_value).strip()
+                current_key = parts[0]
+                current_value = [parts[1].strip()]
+            elif current_key is not None:
+                current_value.append(line.strip())
+        
+        if current_key is not None and '<noise>' not in ' '.join(current_value).strip():
+            text_dict[current_key] = ' '.join(current_value).strip()
 
-    for line in lines:
-        parts = line.split(' ', 1)
-        if len(parts) == 2:
-            if current_key is not None and '<noise>' not in ' '.join(current_value).strip():
-                text_dict[current_key] = ' '.join(current_value).strip()
-            current_key = parts[0]
-            current_value = [parts[1].strip()]
-        elif current_key is not None:
-            current_value.append(line.strip())
+        return text_dict
 
-    # Add the last entry if it doesn't contain <noise>
-    if current_key is not None and '<noise>' not in ' '.join(current_value).strip():
-        text_dict[current_key] = ' '.join(current_value).strip()
+    # Handle 'myst' and 'ogi' datasets (each line represents a full transcription)
+    else:
+        return {
+            line.split(' ', 1)[0]: line.split(' ', 1)[1].strip()
+            for line in lines if '<noise>' not in line
+        }
 
-    return text_dict
-
-# Function to read the wav.scp file (same as original)
-def read_wav_scp_file(file_path):
+# Function to read the wav.scp file and adjust paths for cu, myst, ogi
+def read_wav_scp_file(file_path, dataset_name):
     with open(file_path, 'r') as f:
         lines = f.readlines()
 
