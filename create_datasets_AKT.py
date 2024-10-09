@@ -4,7 +4,7 @@ Date(Last modified): 09/10/2024
 Description: 
 This script create dataset with AKT (audio and CSV)!!! for training using Hugging Face' library datasets.
 It utilizes demographic information (speaker ID, age, and gender) and outputs the dataset in 
-a DatasetDict format (train, valid, test).
+a DatasetDict format (train).
 
 The script reads word annotations from CSV files, splits the corresponding audio into segments, 
 and adds demographic info for each segment. 
@@ -15,14 +15,6 @@ DatasetDict({
         features: ['audio', 'text', 'speaker_id', 'age', 'gender'],
         num_rows: <number_of_rows>
     }),
-    valid: Dataset({
-        features: ['audio', 'text', 'speaker_id', 'age', 'gender'],
-        num_rows: <number_of_rows>
-    }),
-    test: Dataset({
-        features: ['audio', 'text', 'speaker_id', 'age', 'gender'],
-        num_rows: <number_of_rows>
-    })
 })
 - 'audio': Contains audio data as a NumPy array and sampling rate
 - 'text': The corresponding transcription
@@ -102,7 +94,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
 
     # Get the age and gender information from the speaker data
     speaker_info = speaker_data.get(int(speaker_id), {})
-    age = speaker_info.get("Age_yrs", 30)  # Default age is 30 if not available
+    age = speaker_info.get("Age_yrs", None)  # Set age to None if not available
     gender = speaker_info.get("Gender", "Unknown")  # Default gender is 'Unknown' if not available
 
     # Build the dataset for each audio segment with demographic info
@@ -120,40 +112,34 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
 
 # Main function to create the DatasetDict for AKT data
 def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir):
-    # Processes all splits (train, valid, test) and creates a DatasetDict
+    # Processes all files in the AKT data directory and creates a DatasetDict with the 'train' split.
     # Load the demographic data (age, gender) for all speakers
     demographic_data = load_demographic_data(demographic_csv)
-    splits = ["train", "valid", "test"]
-    datasets = {}
 
-    # Loop through each split directory (train, valid, test)
-    for split in splits:
-        split_dir = os.path.join(data_dir, split)  # Get the directory for this split
+    # Create dictionaries to hold paths of wav and csv files, adjusting names
+    wav_files = {os.path.splitext(f)[0].replace('_task1', ''): os.path.join(data_dir, f) 
+                 for f in os.listdir(data_dir) if f.endswith('_task1.wav')}
+    csv_files = {os.path.splitext(f)[0].replace('_kaldi', ''): os.path.join(data_dir, f) 
+                 for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv')}
 
-         # Create dictionaries to hold paths of wav and csv files, adjusting names
-        wav_files = {os.path.splitext(f)[0].replace('_task1', ''): os.path.join(split_dir, f) 
-                     for f in os.listdir(split_dir) if f.endswith('_task1.wav')}
-        csv_files = {os.path.splitext(f)[0].replace('_kaldi', ''): os.path.join(split_dir, f) 
-                     for f in os.listdir(split_dir) if f.endswith('_task1_kaldi.csv')}
+    # Find common base names between wav and csv files
+    common_files = set(wav_files.keys()).intersection(csv_files.keys())
+    all_datasets = []
 
-        # Find common base names between wav and csv files
-        common_files = set(wav_files.keys()).intersection(csv_files.keys())
-        split_datasets = [] # List to store datasets for this split
+    # Process matching wav and csv files
+    for file in common_files:
+        wav_path = wav_files[file]
+        csv_path = csv_files[file]
+        speaker_id = file.split("_")[0]  # Extract speaker ID from the file name
+        dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data)  # Create dataset
+        all_datasets.append(dataset)
 
-        # Process matching wav and csv files
-        for file in common_files:
-            wav_path = wav_files[file]
-            csv_path = csv_files[file]
-            speaker_id = file.split("_")[0]  # Extract speaker ID from the file name
-            dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data)  # Create dataset
-            split_datasets.append(dataset)
+    # Combine all datasets into a single dataset for the 'train' split
+    train_dataset = Dataset.from_concat(all_datasets)
 
-         # Combine datasets for the current split and add to the DatasetDict
-        if split_datasets:
-            datasets[split] = Dataset.from_concat(split_datasets)  # Concatenate all datasets in the current split
-
-     # Create a DatasetDict and save the combined dataset to the output directory
-    dataset_dict = DatasetDict(datasets)
+    # Create a DatasetDict with 'train' split
+    dataset_dict = DatasetDict({"train": train_dataset})
+    # Save the DatasetDict to disk
     dataset_dict.save_to_disk(output_dir)
 
 
