@@ -124,7 +124,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
 
     # Build the dataset for each audio segment with demographic info
     data = {
-        "audio": [wav_path] * len(audio_segments),  # Provide the path to the wav file
+        "audio": [segment["audio"] for segment in audio_segments],  # Provide the path to the wav file
         "text": [segment["text"] for segment in audio_segments],
         "speaker_id": [speaker_id] * len(audio_segments),
         "age": [age] * len(audio_segments),
