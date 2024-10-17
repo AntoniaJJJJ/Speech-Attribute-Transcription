@@ -91,6 +91,7 @@ def split_audio(wav_path, segments):
         # Append the audio segment data and transcription to the list
         audio_data_list.append({
             "audio": {
+                "path": wav_path,  # Include the correct path to the WAV file
                 "array": np.array(segment_audio, dtype=np.float32),  # Store as NumPy array
                 "sampling_rate": 16000  # Set the correct sampling rate
             },
