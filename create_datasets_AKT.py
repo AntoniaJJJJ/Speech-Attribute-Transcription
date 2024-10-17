@@ -72,21 +72,21 @@ def read_csv(csv_path):
 
 # Function to split the audio file into segments based on the annotations
 def split_audio(wav_path, segments):
-     # Load the original audio file at 44100Hz using librosa
-    audio_data_44k, original_sr = librosa.load(wav_path, sr=44100)  # Original audio and sample rate
-    # Downsample the audio to 16kHz
-    audio_data_16k = librosa.resample(audio_data_44k, orig_sr=original_sr, target_sr=16000)
-    # Convert the downsampled audio to pydub AudioSegment for segment slicing
-    audio = AudioSegment(
-        audio_data_16k.tobytes(),  # Convert the audio to raw bytes
-        frame_rate=16000,  # Set the frame rate to 16kHz
-        sample_width=2,  # Assuming 16-bit audio (2 bytes per sample)
-        channels=1  # Mono channel
-    )
-
-    # Initialize an empty list to store audio segments
-    audio_segments = []
+     # Load the original .wav file using librosa and downsample to 16kHz
+    audio_data, original_sr = librosa.load(wav_path, sr=44100)  # Load at 44100Hz
+    audio_data_16k = librosa.resample(audio_data, orig_sr=original_sr, target_sr=16000)  # Downsample to 16kHz
     
+    # Convert downsampled audio to pydub AudioSegment for further processing
+    audio = AudioSegment(
+        audio_data_16k.tobytes(),  # Convert to bytes
+        frame_rate=16000,  # Set frame rate to 16kHz
+        sample_width=2,  # Assuming 16-bit audio (2 bytes per sample)
+        channels=1  # Mono audio
+    )
+    
+    # Initialize an empty list to store audio segments
+    audio_data = []
+
     # Process each segment, extracting the corresponding audio segment
     for segment in segments:
         # Convert start time / end time from seconds to milliseconds
@@ -96,18 +96,16 @@ def split_audio(wav_path, segments):
         word = segment["word"]
         # Slice the audio segment
         segment_audio = audio[start_ms:end_ms]
-         # Convert the segment audio to a NumPy array (required by Hugging Face datasets)
-        segment_audio_np = np.array(segment_audio.get_array_of_samples(), dtype=np.int16)
         # Append the audio segment data and transcription to the list
-        audio_segments.append({
+        audio_data.append({
             "audio": {
-                "array": segment_audio_np,  # NumPy array format
-                "sampling_rate": 16000  # Sampling rate is 16kHz
+                "array": segment_audio.get_array_of_samples(),
+                "sampling_rate": 16000  # Audio is downsampled to 16kHz
             },
             "text": word
         })
 
-    return audio_segments
+    return audio_data
 
 # Function to create the Hugging Face dataset for a single CSV/WAV pair
 def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=200):
@@ -134,7 +132,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
 
     # Build the dataset for each audio segment with demographic info
     data = {
-        "audio": [segment["audio"] for segment in audio_segments],  # In-memory WAV data
+        "audio": [wav_path] * len(audio_segments),  # Provide the path to the wav file
         "text": [segment["text"] for segment in audio_segments],
         "speaker_id": [speaker_id] * len(audio_segments),
         "age": [age] * len(audio_segments),
