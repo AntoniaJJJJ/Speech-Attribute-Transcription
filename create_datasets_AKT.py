@@ -96,10 +96,13 @@ def split_audio(wav_path, segments):
         word = segment["word"]
         # Slice the audio segment
         segment_audio = audio[start_ms:end_ms]
+         # Convert the segment audio to a NumPy array (required by Hugging Face datasets)
+        segment_audio_np = np.array(segment_audio.get_array_of_samples(), dtype=np.int16)
         # Append the audio segment data and transcription to the list
         audio_segments.append({
             "audio": {
-                "array": segment_audio.get_array_of_samples(), 
+                "array": segment_audio_np,  # NumPy array format
+                "sampling_rate": 16000  # Sampling rate is 16kHz
             },
             "text": word
         })
