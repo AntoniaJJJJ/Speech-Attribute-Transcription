@@ -136,7 +136,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
     return dataset
 
 # Main function to create the DatasetDict for AKT data
-def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_process=6, batch_size=500):
+def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_process=20, batch_size=500):
     # Processes 50 files in the AKT data directory and creates a DatasetDict with the 'train' split.
     # Load the demographic data (age, gender) for all speakers
     demographic_data = load_demographic_data(demographic_csv)
@@ -166,11 +166,11 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_
     # Create a DatasetDict with 'train' split
     dataset_dict = DatasetDict({"train": train_dataset})
     # Save the DatasetDict to disk
-    dataset_dict.save_to_disk(output_dir, max_shard_size="5GB")
+    dataset_dict.save_to_disk(output_dir)
 
 
 data_directory = "/srv/scratch/z5369417/AKT_data/"  # Both CSV and WAV files are in the same folder
 demographic_csv = "/srv/scratch/z5369417/AKT_data_processing/AKT_demographic.csv"
 output_directory = "/srv/scratch/z5369417/created_dataset_0808/AKT_dataset"
-create_dataset_dict_AKT(data_directory, demographic_csv, output_directory, num_files_to_process=6, batch_size=500)
+create_dataset_dict_AKT(data_directory, demographic_csv, output_directory, num_files_to_process=20, batch_size=200)
 print(f'Dataset saved to {output_directory}')
