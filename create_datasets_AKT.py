@@ -99,7 +99,7 @@ def split_audio(wav_path, segments):
     return audio_data
 
 # Function to create the Hugging Face dataset for a single CSV/WAV pair
-def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=500):
+def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=200):
     # Creates a Hugging Face dataset by reading CSV and audio data and attaching demographic info
     # Extract the word intervals from the CSV file
     segments = read_csv(csv_path)
