@@ -59,7 +59,7 @@ def load_phoneme_mapping(file_path):
         # Normalize the word (lowercase, no extra spaces)
         word = row['word'].strip().lower()  
          # Split the phonemes (space-separated)
-        phonemes = row['phoneme'].strip().split()
+        phonemes = row['transcription'].strip().split()
         # Add the word and its phoneme mapping to the dictionary 
         phoneme_dict[word] = phonemes  
     return phoneme_dict
