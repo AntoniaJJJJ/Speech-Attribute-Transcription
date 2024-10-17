@@ -48,6 +48,9 @@ from pydub import AudioSegment
 def load_demographic_data(demographic_csv):
     # Read the demographic data CSV file and handle any issues with SpeakerID conversion
     demographic_df = pd.read_csv(demographic_csv)
+
+    # Remove duplicate columns (if any) (such error is shown when running)
+    demographic_df = demographic_df.loc[:, ~demographic_df.columns.duplicated()]
     
     # Convert SpeakerID to numeric, dropping rows where conversion fails
     demographic_df['SpeakerID'] = pd.to_numeric(demographic_df['SpeakerID'], errors='coerce')
@@ -110,7 +113,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
      # Get the age and gender information from the speaker data
     speaker_info = speaker_data.get(speaker_id, {}) if speaker_id is not None else {}
     age = speaker_info.get("Age_yrs", None)  # Set age to None if not available
-    gender = speaker_info.get("Gender", "Unknown")  # Set gender to Unknown if not available
+    gender = str(speaker_info.get("Gender", "Unknown"))  # Set gender to Unknown if not available
 
     # Limit the segments to only 1000
     limited_segments = segments[:batch_size]
