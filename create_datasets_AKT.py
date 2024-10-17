@@ -40,7 +40,7 @@ The output is the same as 'create_data' function
 import os
 import pandas as pd
 import numpy as np
-from io import BytesIO
+import librosa
 from datasets import DatasetDict, Dataset, Audio
 from datasets import concatenate_datasets
 from pydub import AudioSegment
@@ -72,32 +72,39 @@ def read_csv(csv_path):
 
 # Function to split the audio file into segments based on the annotations
 def split_audio(wav_path, segments):
-    # load the .wav file using pydub
-    audio = AudioSegment.from_wav(wav_path)
+     # Load the original audio file at 44100Hz using librosa
+    audio_data_44k, original_sr = librosa.load(wav_path, sr=44100)  # Original audio and sample rate
     # Downsample the audio to 16kHz
-    audio = audio.set_frame_rate(16000)
-    # initialize an empty list to store audio segments
-    audio_data = []
+    audio_data_16k = librosa.resample(audio_data_44k, orig_sr=original_sr, target_sr=16000)
+    # Convert the downsampled audio to pydub AudioSegment for segment slicing
+    audio = AudioSegment(
+        audio_data_16k.tobytes(),  # Convert the audio to raw bytes
+        frame_rate=16000,  # Set the frame rate to 16kHz
+        sample_width=2,  # Assuming 16-bit audio (2 bytes per sample)
+        channels=1  # Mono channel
+    )
 
+    # Initialize an empty list to store audio segments
+    audio_segments = []
+    
     # Process each segment, extracting the corresponding audio segment
     for segment in segments:
-        # convert start time / end time from seconds to milliseconds
+        # Convert start time / end time from seconds to milliseconds
         start_ms = segment["start_time"] * 1000
         end_ms = segment["end_time"] * 1000
-        # transcription associated with the segment
+        # Transcription associated with the segment
         word = segment["word"]
-        # slice the audio segment
+        # Slice the audio segment
         segment_audio = audio[start_ms:end_ms]
         # Append the audio segment data and transcription to the list
-        audio_data.append({
+        audio_segments.append({
             "audio": {
-                "array": segment_audio.get_array_of_samples(),
-                "sampling_rate": 16000  # Set the sampling rate to 16kHz
+                "array": segment_audio.get_array_of_samples(), 
             },
             "text": word
         })
 
-    return audio_data
+    return audio_segments
 
 # Function to create the Hugging Face dataset for a single CSV/WAV pair
 def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=200):
@@ -133,7 +140,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
 
     # Create a Hugging Face Dataset object from the dictionary
     dataset = Dataset.from_dict(data)
-    dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))  # Tell datasets to treat 'audio' as an Audio feature
+    dataset = dataset.cast_column("audio", Audio())  # Tell datasets to treat 'audio' as an Audio feature
     return dataset
 
 # Main function to create the DatasetDict for AKT data
