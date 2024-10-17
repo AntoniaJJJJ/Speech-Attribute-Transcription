@@ -95,13 +95,13 @@ def phonemize_dataset(dataset, phoneme_dict, unknown_words):
         return batch
     
     # Apply the phonemization function to the entire dataset in batches
-    phonemized_dataset = dataset.map(apply_phonemization, batched=False)
+    phonemized_dataset = dataset.map(apply_phonemization, batched=True)
     return phonemized_dataset
 
 # Main function to handle dataset loading, phonemization, and saving the output
 def main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file):
      # Load the AKT dataset from Hugging Face
-    dataset = load_dataset(akt_dataset_path)
+    dataset = load_dataset(akt_dataset_path, split='train')
 
     # Print the structure of the dataset to see the available fields
     print("Dataset structure:", dataset['train'].features)
