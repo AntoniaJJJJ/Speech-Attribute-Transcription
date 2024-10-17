@@ -95,7 +95,7 @@ def phonemize_dataset(dataset, phoneme_dict, unknown_words):
         return batch
     
     # Apply the phonemization function to the entire dataset in batches
-    phonemized_dataset = dataset.map(apply_phonemization, batched=True)
+    phonemized_dataset = dataset.map(apply_phonemization, batched=False)
     return phonemized_dataset
 
 # Main function to handle dataset loading, phonemization, and saving the output
