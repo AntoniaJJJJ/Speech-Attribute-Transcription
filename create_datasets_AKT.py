@@ -128,7 +128,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
 
     # Build the dataset for each audio segment with demographic info
     data = {
-        "audio": [wav_path] * len(audio_segments),  # Provide the path to the wav file
+        "audio": [segment["audio"] for segment in audio_segments],  # Provide the path to the wav file
         "text": [segment["text"] for segment in audio_segments],
         "speaker_id": [speaker_id] * len(audio_segments),
         "age": [age] * len(audio_segments),
@@ -164,8 +164,8 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_
         wav_path = wav_files[file]
         csv_path = csv_files[file]
         speaker_id = file.split("_")[0]  # Extract speaker ID from the file name
-       #dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data, batch_size=batch_size)  # Create dataset with batch size
-        dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data)
+        dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data, batch_size=batch_size)  # Create dataset with batch size
+        #dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data)
         all_datasets.append(dataset)
 
     # Combine all datasets into a single dataset for the 'train' split
