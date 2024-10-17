@@ -81,4 +81,31 @@ def phonemize_text(text, phoneme_dict):
 
 # Apply phonemization to the entire dataset
 def phonemize_dataset(dataset, phoneme_dict):
+     # Define the function to be applied to each batch of text entries
+    def apply_phonemization(batch):
+        # Apply the phonemize_text function to each text entry in the batch
+        batch['phoneme'] = [phonemize_text(text, phoneme_dict) for text in batch['text']]
+        return batch
     
+    # Apply the phonemization function to the entire dataset in batches
+    phonemized_dataset = dataset.map(apply_phonemization, batched=True)
+    return phonemized_dataset
+
+# Main function to handle dataset loading, phonemization, and saving the output
+def main(akt_dataset_path, phoneme_mapping_file, output_path):
+     # Load the AKT dataset from Hugging Face
+    dataset = load_dataset(akt_dataset_path)
+
+    # Load the Australian English word-to-phoneme mapping from the transcription sheet
+    phoneme_dict = load_phoneme_mapping(phoneme_mapping_file)
+    
+    # Phonemize the 'train' split of the dataset
+    phonemized_dataset = phonemize_dataset(dataset['train'], phoneme_dict)
+    
+    # Save the phonemized dataset to disk
+    phonemized_dataset.save_to_disk(output_path)
+
+phoneme_mapping_file = '/srv/scratch/z5369417/AKT_data_processing/AusKidTalk_transcription.xlsx'  # Path to the Excel file
+akt_dataset_path = '/srv/scratch/z5369417/created_dataset_0808/AKT_dataset'  # Path to the AKT dataset
+output_path = '/srv/scratch/z5369417/outputs/phonemization_AKT'  # Path to save the phonemized dataset
+main(akt_dataset_path, phoneme_mapping_file, output_path)

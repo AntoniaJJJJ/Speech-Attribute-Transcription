@@ -8,7 +8,7 @@ a DatasetDict format (train).
 
 The script reads word annotations from CSV files, splits the corresponding audio into segments, 
 and adds demographic info for each segment. 
-The script has limited to process a batch size of 1000 segments
+The script has limited to process a batch size of 100 segments
 The output dataset will have the following structure:
 
 DatasetDict({
@@ -99,7 +99,7 @@ def split_audio(wav_path, segments):
     return audio_data
 
 # Function to create the Hugging Face dataset for a single CSV/WAV pair
-def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=1000):
+def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=100):
     # Creates a Hugging Face dataset by reading CSV and audio data and attaching demographic info
     # Extract the word intervals from the CSV file
     segments = read_csv(csv_path)
