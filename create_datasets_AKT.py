@@ -100,7 +100,8 @@ def split_audio(wav_path, segments):
     return audio_data_list
 
 # Function to create the Hugging Face dataset for a single CSV/WAV pair
-def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=200):
+#def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=200):
+def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
     # Creates a Hugging Face dataset by reading CSV and audio data and attaching demographic info
     # Extract the word intervals from the CSV file
     segments = read_csv(csv_path)
@@ -117,14 +118,17 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
     gender = str(speaker_info.get("Gender", "Unknown"))  # Set gender to Unknown if not available
 
     # Limit the segments to only the batch size (e.g., 500 segments)
-    limited_segments = segments[:batch_size]
+    #limited_segments = segments[:batch_size]
 
     # Extract audio segments based on those intervals
-    audio_segments = split_audio(wav_path, limited_segments)
+    #audio_segments = split_audio(wav_path, limited_segments)
+
+    # Extract audio segments based on all intervals (no batch size limit)
+    audio_segments = split_audio(wav_path, segments)
 
     # Build the dataset for each audio segment with demographic info
     data = {
-        "audio": [segment["audio"] for segment in audio_segments],  # Provide the path to the wav file
+        "audio": [wav_path] * len(audio_segments),  # Provide the path to the wav file
         "text": [segment["text"] for segment in audio_segments],
         "speaker_id": [speaker_id] * len(audio_segments),
         "age": [age] * len(audio_segments),
@@ -137,7 +141,8 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
     return dataset
 
 # Main function to create the DatasetDict for AKT data
-def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_process=20, batch_size=500):
+#def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_process=20, batch_size=500):
+def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir):
     # Processes 50 files in the AKT data directory and creates a DatasetDict with the 'train' split.
     # Load the demographic data (age, gender) for all speakers
     demographic_data = load_demographic_data(demographic_csv)
@@ -149,7 +154,8 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_
              for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv') and not f.endswith('_log.csv')}
 
     # Find common base names between wav and csv files
-    common_files = list(set(wav_files.keys()).intersection(csv_files.keys()))[:num_files_to_process]  # Limit the files processed
+    #common_files = list(set(wav_files.keys()).intersection(csv_files.keys()))[:num_files_to_process]  # Limit the files processed
+    common_files = list(set(wav_files.keys()).intersection(csv_files.keys()))  # Process all matching files
     all_datasets = []
 
 
@@ -158,7 +164,8 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_
         wav_path = wav_files[file]
         csv_path = csv_files[file]
         speaker_id = file.split("_")[0]  # Extract speaker ID from the file name
-        dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data, batch_size=batch_size)  # Create dataset with batch size
+       #dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data, batch_size=batch_size)  # Create dataset with batch size
+        dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data)
         all_datasets.append(dataset)
 
     # Combine all datasets into a single dataset for the 'train' split
