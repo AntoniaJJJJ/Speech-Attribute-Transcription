@@ -166,7 +166,7 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, output_dir, num_files_to_
     # Create a DatasetDict with 'train' split
     dataset_dict = DatasetDict({"train": train_dataset})
     # Save the DatasetDict to disk
-    dataset_dict.save_to_disk(output_dir)
+    dataset_dict.save_to_disk(output_dir, max_shard_size="5GB")
 
 
 data_directory = "/srv/scratch/z5369417/AKT_data/"  # Both CSV and WAV files are in the same folder
