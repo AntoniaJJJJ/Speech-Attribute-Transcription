@@ -65,7 +65,7 @@ def load_phoneme_mapping(file_path):
     return phoneme_dict
 
 # Phonemize a given text using the Australian phoneme mapping
-def phonemize_text(text, phoneme_dict):
+def phonemize_text(text, phoneme_dict, unknown_words):
     # Remove punctuation and lowercase the text for normalization, then split into words
     words = re.sub(r'[^\w\s]', '', text.lower()).split()  # Removes any non-alphabetical characters
     # Initialize an empty list to store phonemes
@@ -77,14 +77,21 @@ def phonemize_text(text, phoneme_dict):
             phonemes.extend(phoneme_dict[word])  # Add phonemes for the known word
         else:
             phonemes.append(f"[UNK]")  # If the word is not in the phoneme dictionary, mark it as unknown
+            unknown_words.add(word)  # Track unknown words
     return phonemes
 
+# Save unknown words to a text file
+def save_unknown_words(unknown_words, file_path):
+    with open(file_path, 'w') as f:
+        for word in sorted(unknown_words):
+            f.write(f"{word}\n")
+
 # Apply phonemization to the entire dataset
-def phonemize_dataset(dataset, phoneme_dict):
+def phonemize_dataset(dataset, phoneme_dict, unknown_words):
      # Define the function to be applied to each batch of text entries
     def apply_phonemization(batch):
         # Apply the phonemize_text function to each text entry in the batch
-        batch['phoneme'] = [phonemize_text(text, phoneme_dict) for text in batch['text']]
+        batch['phoneme'] = [phonemize_text(text, phoneme_dict, unknown_words) for text in batch['text']]
         return batch
     
     # Apply the phonemization function to the entire dataset in batches
@@ -92,20 +99,27 @@ def phonemize_dataset(dataset, phoneme_dict):
     return phonemized_dataset
 
 # Main function to handle dataset loading, phonemization, and saving the output
-def main(akt_dataset_path, phoneme_mapping_file, output_path):
+def main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file):
      # Load the AKT dataset from Hugging Face
     dataset = load_dataset(akt_dataset_path)
 
     # Load the Australian English word-to-phoneme mapping from the transcription sheet
     phoneme_dict = load_phoneme_mapping(phoneme_mapping_file)
+
+     # Set to track unknown words
+    unknown_words = set()
     
     # Phonemize the 'train' split of the dataset
-    phonemized_dataset = phonemize_dataset(dataset['train'], phoneme_dict)
+    phonemized_dataset = phonemize_dataset(dataset['train'], phoneme_dict, unknown_words)
     
     # Save the phonemized dataset to disk
     phonemized_dataset.save_to_disk(output_path)
 
+    # Save the unknown words to a file
+    save_unknown_words(unknown_words, unknown_words_file)
+
 phoneme_mapping_file = '/srv/scratch/z5369417/AKT_data_processing/AusKidTalk_transcription.xlsx'  # Path to the Excel file
 akt_dataset_path = '/srv/scratch/z5369417/created_dataset_0808/AKT_dataset'  # Path to the AKT dataset
 output_path = '/srv/scratch/z5369417/outputs/phonemization_AKT'  # Path to save the phonemized dataset
-main(akt_dataset_path, phoneme_mapping_file, output_path)
+unknown_words_file = '/srv/scratch/z5369417/outputs/phonemization_AKT/unknown_words.txt'  # Path to save the unknown words
+main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file)
