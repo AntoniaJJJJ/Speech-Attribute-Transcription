@@ -40,6 +40,7 @@ The output is the same as 'create_data' function
 import os
 import pandas as pd
 import numpy as np
+from io import BytesIO
 from datasets import DatasetDict, Dataset, Audio
 from datasets import concatenate_datasets
 from pydub import AudioSegment
@@ -123,7 +124,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
 
     # Build the dataset for each audio segment with demographic info
     data = {
-        "audio": [wav_path] * len(audio_segments),  # Provide the path to the wav file
+        "audio": [segment["audio"] for segment in audio_segments],  # In-memory WAV data
         "text": [segment["text"] for segment in audio_segments],
         "speaker_id": [speaker_id] * len(audio_segments),
         "age": [age] * len(audio_segments),
@@ -132,7 +133,7 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
 
     # Create a Hugging Face Dataset object from the dictionary
     dataset = Dataset.from_dict(data)
-    dataset = dataset.cast_column("audio", Audio())  # Tell datasets to treat 'audio' as an Audio feature
+    dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))  # Tell datasets to treat 'audio' as an Audio feature
     return dataset
 
 # Main function to create the DatasetDict for AKT data
