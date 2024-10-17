@@ -103,6 +103,9 @@ def main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file
      # Load the AKT dataset from Hugging Face
     dataset = load_dataset(akt_dataset_path)
 
+    # Print the structure of the dataset to see the available fields
+    print("Dataset structure:", dataset['train'].features)
+
     # Load the Australian English word-to-phoneme mapping from the transcription sheet
     phoneme_dict = load_phoneme_mapping(phoneme_mapping_file)
 
