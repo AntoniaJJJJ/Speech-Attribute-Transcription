@@ -44,7 +44,7 @@ For main(akt_dataset_path, phoneme_mapping_file, output_path):
 """
 import pandas as pd
 import re
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, load_from_disk
 from collections import defaultdict
 
 # Load the phoneme mapping from the 'transcription' sheet in the Excel file
@@ -101,10 +101,7 @@ def phonemize_dataset(dataset, phoneme_dict, unknown_words):
 # Main function to handle dataset loading, phonemization, and saving the output
 def main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file):
      # Load the AKT dataset from Hugging Face
-    dataset = load_dataset(akt_dataset_path, split='train')
-
-    # Print the structure of the dataset to see the available fields
-    print("Dataset structure:", dataset['train'].features)
+    dataset = load_from_disk(akt_dataset_path)
 
     # Load the Australian English word-to-phoneme mapping from the transcription sheet
     phoneme_dict = load_phoneme_mapping(phoneme_mapping_file)
