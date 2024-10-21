@@ -65,6 +65,7 @@ def load_phoneme_mapping(file_path):
         phoneme_dict[word] = phonemes  
     return phoneme_dict
 
+
 # Load HCE phoneme list from the provided Excel chart (columns contain phonemes)
 def load_hce_phonemes(file_path):
      hce_phonemes_df = pd.read_excel(file_path, sheet_name='Sheet1', header=None)  # No header in the sheet
@@ -99,23 +100,57 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
     
     return ' '.join(phonemes_list)
 
+# Process text to handle compound words before phonemization
+def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
+    # Handle special cases for compound words like o_clock -> o'clock
+    if text == "o_clock":
+        components = ["o'clock"]
+    else:
+        components = text.split('_')
+
+    phonemized_components = []
+    for component in components:
+        if component in phoneme_dict:
+            transcription = phoneme_dict[component]
+            pattern = '|'.join([re.escape(p) for p in hce_phonemes])
+            separated_phonemes = re.findall(pattern, transcription)
+            
+            if separated_phonemes:
+                phonemized_components.append(' '.join(separated_phonemes))
+            else:
+                unknown_words.add(text)
+                return None  # Component not found, mark as unknown
+        else:
+            unknown_words.add(text)
+            return None  # Component not found, mark as unknown
+    
+    return ' '.join(phonemized_components)  # Join phonemes of all components
+
+# Phonemize the dataset and process unknown words
+def phonemize_dataset(dataset, phoneme_dict, hce_phonemes, unknown_words):
+    def apply_phonemization(batch):
+        phonemes_akt = []
+        for text in batch['text']:
+            # Check for compound words first
+            phonemized_text = process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words)
+            
+            if phonemized_text is not None:
+                phonemes_akt.append(phonemized_text)
+            else:
+                # If not compound or if unknown, try regular phonemization
+                phonemes_akt.append(phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words))
+        
+        batch['phoneme_akt'] = phonemes_akt
+        return batch
+    
+    phonemized_dataset = dataset.map(apply_phonemization, batched=True)
+    return phonemized_dataset
+
 # Save unknown words to a text file
 def save_unknown_words(unknown_words, file_path):
     with open(file_path, 'w') as f:
         for word in sorted(unknown_words):
             f.write(f"{word}\n")
-
-# Apply phonemization to the entire dataset
-def phonemize_dataset(dataset, phoneme_dict, hce_phonemes, unknown_words):
-     # Define the function to be applied to each batch of text entries
-    def apply_phonemization(batch):
-        # Apply the phonemize_text function to each text entry in the batch
-        batch['phoneme_akt'] = [phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words) for text in batch['text']]
-        return batch
-    
-    # Apply the phonemization function to the entire dataset in batches
-    phonemized_dataset = dataset.map(apply_phonemization, batched=True)
-    return phonemized_dataset
 
 # Main function to handle dataset loading, phonemization, and saving the output
 def main(akt_dataset_path, phoneme_mapping_file, hce_phonemes_file, output_path, unknown_words_file):
