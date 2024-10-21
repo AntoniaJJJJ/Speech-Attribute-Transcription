@@ -76,46 +76,57 @@ def load_hce_phonemes(file_path):
 
 # Phonemize a given text using the Australian phoneme mapping
 def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
-    # Remove punctuation and lowercase the text for normalization, then split into words
-    words = re.sub(r'[^\w\s]', '', text.lower()).split()  # Removes any non-alphabetical characters
-    # Initialize an empty list to store phonemes
+    words = re.sub(r'[^\w\s]', '', text.lower()).split()  # Normalize text and split into words
     phonemes_list = []
     
-    # Convert each word into its phonemic representation
     for word in words:
+        # Debug: Track word processing
+        print(f"Processing word: {word}")
+
         if word in phoneme_dict:
             transcription = phoneme_dict[word]
-            
-            # Split the transcription based on HCE phonemes
-            pattern = '|'.join([re.escape(p) for p in hce_phonemes])  # Regex pattern from HCE phonemes
-            separated_phonemes = re.findall(pattern, transcription)   # Extract matching phonemes
+            pattern = '|'.join([re.escape(p) for p in hce_phonemes])
+            separated_phonemes = re.findall(pattern, transcription)
             
             if separated_phonemes:
                 phonemes_list.append(' '.join(separated_phonemes))  # Join phonemes with spaces
+                # Debug: Show phonemized word
+                print(f"Phonemized word: {word} -> {' '.join(separated_phonemes)}")
             else:
                 phonemes_list.append("UNK")  # Phonemization failed
-                unknown_words.add(word)  # Add to unknown words because phonemization failed
+                unknown_words.add(word)  # Add to unknown words
+                # Debug: Failed phonemization
+                print(f"Failed to phonemize word: {word} (Added to unknown words)")
         else:
             phonemes_list.append("UNK")
-            unknown_words.add(word)  # Track unknown words only if not in phoneme_dict
+            unknown_words.add(word)  # Track unknown words
+            # Debug: Word not found in phoneme_dict
+            print(f"Word not found in phoneme_dict: {word} (Added to unknown words)")
     
     return ' '.join(phonemes_list)
 
 # Process text to handle compound words before phonemization
 def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
-    # Handle special cases for compound words like o_clock -> o'clock
+    # Debug: Start processing compound word
+    print(f"Processing compound word: {text}")
+    
     if "_o_clock" in text:
         components = text.split('_o_clock')
         components.append("o'clock")  # Add "o'clock" as the second part
+        print(f"Split '{text}' into: {components}")
 
-        # Ensure we try both forms of apostrophes in the phoneme dictionary
+        # Handle apostrophes in "o'clock"
         if "o'clock" not in phoneme_dict and "o’clock" in phoneme_dict:
-            components[-1] = "o’clock"  # Use curly apostrophe if straight apostrophe not found
+            components[-1] = "o’clock"  # Use curly apostrophe if straight one is missing
+            print(f"Using curly apostrophe for 'o'clock'")
     else:
         components = text.split('_')
 
     phonemized_components = []
     for component in components:
+        component = component.strip()  # Clean up component
+        print(f"Processing component: {component}")
+
         if component in phoneme_dict:
             transcription = phoneme_dict[component]
             pattern = '|'.join([re.escape(p) for p in hce_phonemes])
@@ -123,10 +134,13 @@ def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
             
             if separated_phonemes:
                 phonemized_components.append(' '.join(separated_phonemes))
+                print(f"Phonemized component: {component} -> {' '.join(separated_phonemes)}")
             else:
+                print(f"Failed to phonemize component: {component}")
                 return None  # Component not found, mark as unknown
         else:
-            unknown_words.add(text)
+            print(f"Component not found in phoneme_dict: {component}")
+            unknown_words.add(text)  # Add compound word to unknown if a part fails
             return None  # Component not found, mark as unknown
     
     return ' '.join(phonemized_components)  # Join phonemes of all components
