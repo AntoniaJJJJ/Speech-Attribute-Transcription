@@ -67,9 +67,11 @@ def load_phoneme_mapping(file_path):
 
 # Load HCE phoneme list from the provided Excel chart (columns contain phonemes)
 def load_hce_phonemes(file_path):
-    hce_phonemes_df = pd.read_excel(file_path, sheet_name='Sheet1')
-    phonemes = hce_phonemes_df['Phoneme'].tolist()
-    return phonemes
+     hce_phonemes_df = pd.read_excel(file_path, sheet_name='Sheet1', header=None)  # No header in the sheet
+    # Extract the first column (Column A) containing the phonemes
+     phonemes = hce_phonemes_df.iloc[:, 0].dropna().tolist()  # Drop any NaN values
+
+     return phonemes
 
 # Phonemize a given text using the Australian phoneme mapping
 def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
