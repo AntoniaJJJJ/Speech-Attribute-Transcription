@@ -70,10 +70,10 @@ def load_hce_phonemes(file_path):
     # Load HCE phonemes from the third sheet (adjust the sheet name if needed)
     hce_df = pd.read_excel(file_path, sheet_name='HCE feature charts')
     # Extract vowels from row 4, columns B to T
-    vowel_phonemes = hce_df.iloc[3, 1:21].apply(lambda x: x.strip() if isinstance(x, str) else x).dropna().tolist()
+    vowel_phonemes = hce_df.iloc[3, 1:21].apply(lambda x: x.strip('/')).dropna().tolist()
     
     # Extract consonants from row 16, columns B to Y
-    consonant_phonemes = hce_df.iloc[15, 1:26].apply(lambda x: x.strip() if isinstance(x, str) else x).dropna().tolist()
+    consonant_phonemes = hce_df.iloc[15, 1:26].apply(lambda x: x.strip('/')).dropna().tolist()
 
     # Combine vowels and consonants into a single list
     phonemes = vowel_phonemes + consonant_phonemes
@@ -89,14 +89,20 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
     # Convert each word into its phonemic representation
     for word in words:
         if word in phoneme_dict:
-            phonemes = phoneme_dict[word]
-            # Split the phonemes based on the HCE phoneme list
-            # Add phonemes for the known word
-            separated_phonemes = ' '.join([phoneme for phoneme in hce_phonemes if phoneme in phonemes])
-            phonemes_list.append(separated_phonemes)
+            transcription = phoneme_dict[word]
+            
+            # Split the transcription based on HCE phonemes
+            pattern = '|'.join([re.escape(p) for p in hce_phonemes])  # Regex pattern from HCE phonemes
+            separated_phonemes = re.findall(pattern, transcription)  # Extract matching phonemes
+            
+            if separated_phonemes:
+                phonemes_list.append(' '.join(separated_phonemes))  # Join phonemes with spaces
+            else:
+                phonemes_list.append("UNK")  # No matching phonemes found
         else:
-            phonemes_list.append("UNK")  # If the word is not in the phoneme dictionary, mark it as unknown
+            phonemes_list.append("UNK")
             unknown_words.add(word)  # Track unknown words
+            
     return phonemes_list
 
 # Save unknown words to a text file
