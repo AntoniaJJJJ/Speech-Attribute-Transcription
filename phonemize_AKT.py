@@ -87,8 +87,8 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
             transcription = phoneme_dict[word]
             
             # Split the transcription based on HCE phonemes
-            pattern = '|'.join([re.escape(p) for p in hce_phonemes])
-            separated_phonemes = re.findall(pattern, transcription)
+            pattern = '|'.join([re.escape(p) for p in hce_phonemes])  # Regex pattern from HCE phonemes
+            separated_phonemes = re.findall(pattern, transcription)   # Extract matching phonemes
             
             if separated_phonemes:
                 phonemes_list.append(' '.join(separated_phonemes))  # Join phonemes with spaces
@@ -105,10 +105,12 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
 def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
     # Handle special cases for compound words like o_clock -> o'clock
     if "_o_clock" in text:
-        # Split at "_o_clock" and process the first part and "o'clock"
         components = text.split('_o_clock')
-        first_part = components[0].strip()  # First part like "four", "one"
-        components = [first_part, "o'clock"]  # Rebuild components as ["four", "o'clock"]
+        components.append("o'clock")  # Add "o'clock" as the second part
+
+        # Ensure we try both forms of apostrophes in the phoneme dictionary
+        if "o'clock" not in phoneme_dict and "o’clock" in phoneme_dict:
+            components[-1] = "o’clock"  # Use curly apostrophe if straight apostrophe not found
     else:
         components = text.split('_')
 
@@ -122,7 +124,6 @@ def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
             if separated_phonemes:
                 phonemized_components.append(' '.join(separated_phonemes))
             else:
-                unknown_words.add(text)
                 return None  # Component not found, mark as unknown
         else:
             unknown_words.add(text)
