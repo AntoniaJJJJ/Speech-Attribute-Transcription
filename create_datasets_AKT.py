@@ -138,6 +138,11 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, batch_size=
 
     # Create a Hugging Face Dataset object from the dictionary
     dataset = Dataset.from_dict(data)
+    
+    # Update the path assignment to ensure it's passed correctly
+    for i, audio_entry in enumerate(data["audio"]):
+        dataset[i]["audio"]["path"] = audio_entry["path"]  # Explicitly ensure path is set
+
     dataset = dataset.cast_column("audio", Audio())  # Tell datasets to treat 'audio' as an Audio feature
     return dataset
 
