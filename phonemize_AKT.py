@@ -143,7 +143,7 @@ def phonemize_dataset(dataset, phoneme_dict, hce_phonemes, unknown_words):
                 for key in batch.keys():
                     filtered_batch[key].append(batch[key][i])  # Keep only rows that are phonemized
             else:
-                # If the word is 'duck' or 'fish', it will be added to unknown and removed
+                # If the word is 'UNK', it will be added to unknown and removed
                 phonemized_single_word = phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words)
                 if phonemized_single_word != "UNK":  # If not UNK, keep the row
                     phonemes_akt.append(phonemized_single_word)
