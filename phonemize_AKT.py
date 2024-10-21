@@ -59,26 +59,44 @@ def load_phoneme_mapping(file_path):
         # Normalize the word (lowercase, no extra spaces)
         word = row['word'].strip().lower()  
          # Split the phonemes (space-separated)
-        phonemes = row['transcription'].strip().split()
+        phonemes = row['transcription'].strip()
         # Add the word and its phoneme mapping to the dictionary 
         phoneme_dict[word] = phonemes  
     return phoneme_dict
 
+# Load HCE phoneme list from the provided Excel chart (columns contain phonemes)
+def load_hce_phonemes(file_path):
+    # Load HCE phonemes from the third sheet (adjust the sheet name if needed)
+    hce_df = pd.read_excel(file_path, sheet_name='HCE feature charts')
+    # Extract vowels from row 4, columns B to T
+    vowel_phonemes = hce_df.iloc[3, 1:21].apply(lambda x: x.strip() if isinstance(x, str) else x).dropna().tolist()
+    
+    # Extract consonants from row 16, columns B to Y
+    consonant_phonemes = hce_df.iloc[15, 1:26].apply(lambda x: x.strip() if isinstance(x, str) else x).dropna().tolist()
+
+    # Combine vowels and consonants into a single list
+    phonemes = vowel_phonemes + consonant_phonemes
+    return phonemes
+
 # Phonemize a given text using the Australian phoneme mapping
-def phonemize_text(text, phoneme_dict, unknown_words):
+def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
     # Remove punctuation and lowercase the text for normalization, then split into words
     words = re.sub(r'[^\w\s]', '', text.lower()).split()  # Removes any non-alphabetical characters
     # Initialize an empty list to store phonemes
-    phonemes = []  
+    phonemes_list = []
     
     # Convert each word into its phonemic representation
     for word in words:
         if word in phoneme_dict:
-            phonemes.extend(phoneme_dict[word])  # Add phonemes for the known word
+            phonemes = phoneme_dict[word]
+            # Split the phonemes based on the HCE phoneme list
+            # Add phonemes for the known word
+            separated_phonemes = ' '.join([phoneme for phoneme in hce_phonemes if phoneme in phonemes])
+            phonemes_list.append(separated_phonemes)
         else:
-            phonemes.append(f"[UNK]")  # If the word is not in the phoneme dictionary, mark it as unknown
+            phonemes_list.append("UNK")  # If the word is not in the phoneme dictionary, mark it as unknown
             unknown_words.add(word)  # Track unknown words
-    return phonemes
+    return phonemes_list
 
 # Save unknown words to a text file
 def save_unknown_words(unknown_words, file_path):
@@ -87,11 +105,11 @@ def save_unknown_words(unknown_words, file_path):
             f.write(f"{word}\n")
 
 # Apply phonemization to the entire dataset
-def phonemize_dataset(dataset, phoneme_dict, unknown_words):
+def phonemize_dataset(dataset, phoneme_dict, hce_phonemes, unknown_words):
      # Define the function to be applied to each batch of text entries
     def apply_phonemization(batch):
         # Apply the phonemize_text function to each text entry in the batch
-        batch['phoneme'] = [phonemize_text(text, phoneme_dict, unknown_words) for text in batch['text']]
+        batch['phoneme'] = [phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words) for text in batch['text']]
         return batch
     
     # Apply the phonemization function to the entire dataset in batches
@@ -99,18 +117,21 @@ def phonemize_dataset(dataset, phoneme_dict, unknown_words):
     return phonemized_dataset
 
 # Main function to handle dataset loading, phonemization, and saving the output
-def main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file):
+def main(akt_dataset_path, phoneme_mapping_file, hce_phonemes_file, output_path, unknown_words_file):
      # Load the AKT dataset from Hugging Face
     dataset = load_from_disk(akt_dataset_path)
 
     # Load the Australian English word-to-phoneme mapping from the transcription sheet
     phoneme_dict = load_phoneme_mapping(phoneme_mapping_file)
 
+    # Load the HCE phonemes to help with splitting the phoneme strings
+    hce_phonemes = load_hce_phonemes(hce_phonemes_file)
+
      # Set to track unknown words
     unknown_words = set()
     
     # Phonemize the 'train' split of the dataset
-    phonemized_dataset = phonemize_dataset(dataset['train'], phoneme_dict, unknown_words)
+    phonemized_dataset = phonemize_dataset(dataset['train'], phoneme_dict, hce_phonemes, unknown_words)
     
     # Save the phonemized dataset to disk
     phonemized_dataset.save_to_disk(output_path)
@@ -119,7 +140,8 @@ def main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file
     save_unknown_words(unknown_words, unknown_words_file)
 
 phoneme_mapping_file = '/srv/scratch/z5369417/AKT_data_processing/AusKidTalk_transcription.xlsx'  # Path to the Excel file
+hce_phonemes_file = '/srv/scratch/z5369417/AKT_data_processing/AusKidTalk_transcription.xlsx'  # Same Excel file, different sheet
 akt_dataset_path = '/srv/scratch/z5369417/created_dataset_0808/AKT_dataset'  # Path to the AKT dataset
 output_path = '/srv/scratch/z5369417/outputs/phonemization_AKT'  # Path to save the phonemized dataset
 unknown_words_file = '/srv/scratch/z5369417/outputs/phonemization_AKT/unknown_words.txt'  # Path to save the unknown words
-main(akt_dataset_path, phoneme_mapping_file, output_path, unknown_words_file)
+main(akt_dataset_path, phoneme_mapping_file, hce_phonemes_file, output_path, unknown_words_file)
