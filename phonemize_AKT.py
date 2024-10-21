@@ -70,10 +70,10 @@ def load_hce_phonemes(file_path):
     # Load HCE phonemes from the third sheet (adjust the sheet name if needed)
     hce_df = pd.read_excel(file_path, sheet_name='HCE feature charts')
     # Extract vowels from row 4, columns B to T
-    vowel_phonemes = hce_df.iloc[3, 1:21].apply(lambda x: x.strip('/')).dropna().tolist()
+    vowel_phonemes = hce_df.iloc[3, 1:21].apply(lambda x: x.strip('/') if isinstance(x, str) else None).dropna().tolist()
     
-    # Extract consonants from row 16, columns B to Y
-    consonant_phonemes = hce_df.iloc[15, 1:26].apply(lambda x: x.strip('/')).dropna().tolist()
+    # Extract consonants from row 15, columns B to Y
+    consonant_phonemes = hce_df.iloc[14, 1:26].apply(lambda x: x.strip('/') if isinstance(x, str) else None).dropna().tolist()
 
     # Combine vowels and consonants into a single list
     phonemes = vowel_phonemes + consonant_phonemes
@@ -102,7 +102,7 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
         else:
             phonemes_list.append("UNK")
             unknown_words.add(word)  # Track unknown words
-            
+
     return phonemes_list
 
 # Save unknown words to a text file
