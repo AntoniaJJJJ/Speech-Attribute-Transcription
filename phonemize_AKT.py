@@ -87,17 +87,17 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
             transcription = phoneme_dict[word]
             
             # Split the transcription based on HCE phonemes
-            pattern = '|'.join([re.escape(p) for p in hce_phonemes])  # Regex pattern from HCE phonemes
-            separated_phonemes = re.findall(pattern, transcription)  # Extract matching phonemes
+            pattern = '|'.join([re.escape(p) for p in hce_phonemes])
+            separated_phonemes = re.findall(pattern, transcription)
             
             if separated_phonemes:
                 phonemes_list.append(' '.join(separated_phonemes))  # Join phonemes with spaces
             else:
-                phonemes_list.append("UNK")  # No matching phonemes found
-                unknown_words.add(word)  # Only add to unknown_words if phonemization fails here
+                phonemes_list.append("UNK")  # Phonemization failed
+                unknown_words.add(word)  # Add to unknown words because phonemization failed
         else:
             phonemes_list.append("UNK")
-            unknown_words.add(word)  # Track unknown words
+            unknown_words.add(word)  # Track unknown words only if not in phoneme_dict
     
     return ' '.join(phonemes_list)
 
@@ -105,8 +105,10 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
 def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
     # Handle special cases for compound words like o_clock -> o'clock
     if "_o_clock" in text:
+        # Split at "_o_clock" and process the first part and "o'clock"
         components = text.split('_o_clock')
-        components = [components[0].strip(), "o'clock"]  # Strip spaces and add "o'clock"
+        first_part = components[0].strip()  # First part like "four", "one"
+        components = [first_part, "o'clock"]  # Rebuild components as ["four", "o'clock"]
     else:
         components = text.split('_')
 
