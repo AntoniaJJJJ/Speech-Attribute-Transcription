@@ -103,8 +103,9 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
 # Process text to handle compound words before phonemization
 def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
     # Handle special cases for compound words like o_clock -> o'clock
-    if text == "o_clock":
-        components = ["o'clock"]
+    if "_o_clock" in text:
+        components = text.split('_o_clock')
+        components.append("o'clock")  # Add "o'clock" as the second part
     else:
         components = text.split('_')
 
@@ -130,20 +131,29 @@ def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
 def phonemize_dataset(dataset, phoneme_dict, hce_phonemes, unknown_words):
     def apply_phonemization(batch):
         phonemes_akt = []
-        for text in batch['text']:
+        filtered_batch = {key: [] for key in batch.keys()}  # Initialize filtered batch
+
+        for i, text in enumerate(batch['text']):
             # Check for compound words first
             phonemized_text = process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words)
             
             if phonemized_text is not None:
+                # If the compound word was successfully phonemized, use that result
                 phonemes_akt.append(phonemized_text)
+                for key in batch.keys():
+                    filtered_batch[key].append(batch[key][i])  # Keep only rows that are phonemized
             else:
-                # If not compound or if unknown, try regular phonemization
-                phonemes_akt.append(phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words))
+                # If the word is 'duck' or 'fish', it will be added to unknown and removed
+                phonemized_single_word = phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words)
+                if phonemized_single_word != "UNK":  # If not UNK, keep the row
+                    phonemes_akt.append(phonemized_single_word)
+                    for key in batch.keys():
+                        filtered_batch[key].append(batch[key][i])
         
-        batch['phoneme_akt'] = phonemes_akt
-        return batch
-    
-    phonemized_dataset = dataset.map(apply_phonemization, batched=True)
+        filtered_batch['phoneme_akt'] = phonemes_akt
+        return filtered_batch
+
+    phonemized_dataset = dataset.map(apply_phonemization, batched=True) 
     return phonemized_dataset
 
 # Save unknown words to a text file
