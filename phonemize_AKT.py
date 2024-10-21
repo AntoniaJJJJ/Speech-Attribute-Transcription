@@ -44,6 +44,7 @@ For main(akt_dataset_path, phoneme_mapping_file, output_path):
 """
 import pandas as pd
 import re
+import os
 from datasets import load_dataset, Dataset, load_from_disk
 from collections import defaultdict
 
@@ -133,11 +134,15 @@ def main(akt_dataset_path, phoneme_mapping_file, hce_phonemes_file, output_path,
     # Phonemize the 'train' split of the dataset
     phonemized_dataset = phonemize_dataset(dataset['train'], phoneme_dict, hce_phonemes, unknown_words)
     
+    # Create directory structure as per the required format
+    train_output_path = os.path.join(output_path, 'train')
+    os.makedirs(train_output_path, exist_ok=True)
+
     # Save the phonemized dataset to disk
-    phonemized_dataset.save_to_disk(output_path)
+    phonemized_dataset.save_to_disk(train_output_path)
 
     # Save the unknown words to a file
-    save_unknown_words(unknown_words, unknown_words_file)
+    save_unknown_words(unknown_words, os.path.join(output_path, 'unknown_words.txt'))
 
 phoneme_mapping_file = '/srv/scratch/z5369417/AKT_data_processing/AusKidTalk_transcription.xlsx'  # Path to the Excel file
 hce_phonemes_file = '/srv/scratch/z5369417/AKT_data_processing/AusKidTalk_transcription.xlsx'  # Same Excel file, different sheet
