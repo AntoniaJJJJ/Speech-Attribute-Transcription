@@ -94,6 +94,7 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
                 phonemes_list.append(' '.join(separated_phonemes))  # Join phonemes with spaces
             else:
                 phonemes_list.append("UNK")  # No matching phonemes found
+                unknown_words.add(word)  # Only add to unknown_words if phonemization fails here
         else:
             phonemes_list.append("UNK")
             unknown_words.add(word)  # Track unknown words
@@ -105,7 +106,7 @@ def process_compound_words(text, phoneme_dict, hce_phonemes, unknown_words):
     # Handle special cases for compound words like o_clock -> o'clock
     if "_o_clock" in text:
         components = text.split('_o_clock')
-        components.append("o'clock")  # Add "o'clock" as the second part
+        components = [components[0].strip(), "o'clock"]  # Strip spaces and add "o'clock"
     else:
         components = text.split('_')
 
