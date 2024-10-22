@@ -1,6 +1,6 @@
 """
 Author: Antonia Jian
-Date (Last modified): 17/10/2024
+Date (Last modified): 22/10/2024
 Description:
 This script phonemizes AKT (Australian English) dataset using a phoneme mapping 
 chart. It processes the dataset using the Hugging Face 
@@ -14,6 +14,10 @@ The output dataset will have the following structure:
 DatasetDict({
     train: Dataset({
         features: ['audio', 'text', 'speaker_id', 'age', 'phoneme'],
+        num_rows: <number_of_rows>
+    }),
+    test: Dataset({
+    features: ['audio', 'text', 'speaker_id', 'age', 'phoneme'],
         num_rows: <number_of_rows>
     }),
 })
@@ -176,18 +180,24 @@ def main(akt_dataset_path, phoneme_mapping_file, hce_phonemes_file, output_path,
     # Set to track unknown words
     unknown_words = set()
 
-    # Phonemize the 'train' split of the dataset
-    phonemized_dataset = phonemize_dataset(dataset['train'], phoneme_dict, hce_phonemes, unknown_words)
-    
-    # Create directory structure as per the required format
-    train_output_path = os.path.join(output_path, 'train')
-    os.makedirs(train_output_path, exist_ok=True)
+    # Phonemize the 'train' split if it exists
+    if 'train' in dataset:
+        print("Phonemizing the train split...")
+        phonemized_train = phonemize_dataset(dataset['train'], phoneme_dict, hce_phonemes, unknown_words)
+        train_output_path = os.path.join(output_path, 'train')
+        os.makedirs(train_output_path, exist_ok=True)
+        phonemized_train.save_to_disk(train_output_path)
 
-    # Save the phonemized dataset to disk
-    phonemized_dataset.save_to_disk(train_output_path)
+    # Phonemize the 'test' split if it exists
+    if 'test' in dataset:
+        print("Phonemizing the test split...")
+        phonemized_test = phonemize_dataset(dataset['test'], phoneme_dict, hce_phonemes, unknown_words)
+        test_output_path = os.path.join(output_path, 'test')
+        os.makedirs(test_output_path, exist_ok=True)
+        phonemized_test.save_to_disk(test_output_path)
 
     # Save the unknown words to a file
-    save_unknown_words(unknown_words, os.path.join(output_path, 'unknown_words.txt'))
+    save_unknown_words(unknown_words, unknown_words_file)
 
 
 # File paths for inputs and outputs
