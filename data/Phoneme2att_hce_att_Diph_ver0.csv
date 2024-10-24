@@ -1,4 +1,4 @@
-Phoneme_hce,Phoneme_other,Phoneme_other.1,Language,high,low,front,back,round,tense,offglide,onglide,syllabic,consonantal,sonorant,continuant,delayed release,sibilant,voice,nasal,anterior,labial,coronal,distributed,lateral,diphthong,monophthong,long,short
+Phoneme_hce,Phoneme_other,Phoneme_other.1,Language,high,low,front,back,round,tense,offglide,onglide,syllabic,consonantal,sonorant,continuant,delayed_release,sibilant,voice,nasal,anterior,labial,coronal,distributed,lateral,diphthong,monophthong,long,short
 iː,,,en_au,1,0,1,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0
 ɪ,,,en_au,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1
 e,,,en_au,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1
