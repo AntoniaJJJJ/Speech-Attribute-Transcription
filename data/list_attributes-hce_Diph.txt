@@ -10,7 +10,7 @@ syllabic
 consonantal
 sonorant
 continuant
-delayed_release
+delayedrelease
 sibilant
 voice
 nasal
