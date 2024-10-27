@@ -78,10 +78,12 @@ def split_audio(wav_path, segments):
     return audio_data_list
 
 # Function to create the Hugging Face dataset for a single CSV/WAV pair
-def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
+def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data, segments=None):
     # Creates a Hugging Face dataset by reading CSV and audio data and attaching demographic info
     # Extract the word intervals from the CSV file
-    segments, error_counts = read_csv(csv_path)
+    # If segments are not provided, read them from the CSV
+    if segments is None:
+        segments, _ = read_csv(csv_path)
 
     # Ensure speaker_id is handled properly by converting to the correct type
     try:
@@ -110,11 +112,11 @@ def create_dataset_AKT(csv_path, wav_path, speaker_id, speaker_data):
     dataset = Dataset.from_dict(data)
 
     dataset = dataset.cast_column("audio", Audio())  # Tell datasets to treat 'audio' as an Audio feature
-    return dataset, error_counts
+    return dataset
 
 # Main function to create the DatasetDict with 'train' and 'test' splits
 def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_dir):
-    # Load the demographic data (age, gender) for all speakers
+     # Load the demographic data (age, gender) for all speakers, excluding 3-year-olds
     demographic_data = load_demographic_data(demographic_csv)
 
     # Load the annotation file to get SSD and hand-corrected info
@@ -126,19 +128,18 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
 
     # Create dictionaries to hold paths of wav and csv files, adjusting names
     wav_files = {os.path.splitext(f)[0].replace('_task1', ''): os.path.join(data_dir, f) 
-             for f in os.listdir(data_dir) if f.endswith('_task1.wav')}
+                 for f in os.listdir(data_dir) if f.endswith('_task1.wav')}
     csv_files = {os.path.splitext(f)[0].replace('_task1_kaldi', ''): os.path.join(data_dir, f) 
-             for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv') and not f.endswith('_log.csv')}
+                 for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv') and not f.endswith('_log.csv')}
 
     # Find common base names between wav and csv files
     common_files = set(wav_files.keys()).intersection(csv_files.keys())
-   
+
     processed_ids = []
     missing_data_ids = []
-    train_data = {"audio": [], "text": [], "speaker_id": [], "age": [], "gender": []}
-    test_data = {"audio": [], "text": [], "speaker_id": [], "age": [], "gender": []}
-    all_error_counts = []
-
+    train_datasets = []
+    test_datasets = []
+    all_error_counts = set()  # To store unique error counts
 
     # Process matching wav and csv files
     for _, row in handcorrected_df.iterrows():
@@ -150,22 +151,34 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
             csv_path = csv_files[str(speaker_id)]
             ssd_status = row['SSD']
 
-            # Create the dataset
-            dataset, error_counts = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data)
-            all_error_counts.extend(error_counts)
+            # Retrieve segments and error counts from read_csv
+            segments, error_counts = read_csv(csv_path)
 
-            # Append the dataset to train or test split based on SSD status
-            # Apply first and second sorting criteria
-            for i, segment in enumerate(dataset):
-                # Convert each segment to a Dataset object
-                segment_data = {key: segment[key][0] for key in segment.keys()}
-                # Add to train or test based on SSD and error count criteria
-                if ssd_status == 0 and error_counts[i] < 2:
-                    for key in train_data:
-                        train_data[key].append(segment_data[key])
-                else:
-                    for key in test_data:
-                        test_data[key].append(segment_data[key])
+            # Update the set of all error counts
+            all_error_counts.update(error_counts)
+
+            # Separate segments based on SSD status and error_count criteria
+            train_segments = []
+            test_segments = []
+
+            if ssd_status == 0:
+                # Non-SSD group: split by error_count
+                for segment, error_count in zip(segments, error_counts):
+                    if error_count < 2:
+                        train_segments.append(segment)  # Remains in train if error_count < 2
+                    else:
+                        test_segments.append(segment)  # Moves to test if error_count >= 2
+            else:
+                # SSD group: all samples go to test regardless of error_count
+                test_segments.extend(segments)
+
+            # Create datasets for train and test segments if they exist
+            if train_segments:
+                train_dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data, train_segments)
+                train_datasets.append(train_dataset)
+            if test_segments:
+                test_dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data, test_segments)
+                test_datasets.append(test_dataset)
 
             # Add to processed_ids
             processed_ids.append(speaker_id)
@@ -173,28 +186,23 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
             # If the speaker_id doesn't have WAV/CSV, add to missing_data_ids
             missing_data_ids.append(speaker_id)
 
+    # Print unique error counts
+    print(f"Unique error counts: {sorted(all_error_counts)}")
+
     # Combine all datasets for train and test splits
-    if train_data["audio"]:
-        train_dataset = Dataset.from_dict(train_data).cast_column("audio", Audio())
-    else:
-        train_dataset = None
-    if test_data["audio"]:
-        test_dataset = Dataset.from_dict(test_data).cast_column("audio", Audio())
-    else:
-        test_dataset = None
+    if train_datasets:
+        train_dataset = concatenate_datasets(train_datasets)
+    if test_datasets:
+        test_dataset = concatenate_datasets(test_datasets)
 
     # Create a DatasetDict with 'train' and 'test' splits
     dataset_dict = DatasetDict({
-        "train": train_dataset,
-        "test": test_dataset
+        "train": train_dataset if train_datasets else None,
+        "test": test_dataset if test_datasets else None
     })
 
     # Save the DatasetDict to disk
     dataset_dict.save_to_disk(output_dir)
-
-    # Print out unique numbers of errors in the whole dataset
-    unique_error_counts = set(all_error_counts)
-    print("Unique error counts in dataset:", unique_error_counts)
 
     # Print out the results
     print(f"Number of IDs processed (hand-corrected, with data): {len(processed_ids)}")
