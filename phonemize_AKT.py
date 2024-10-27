@@ -203,8 +203,8 @@ def main(akt_dataset_path, phoneme_mapping_file, hce_phonemes_file, output_path,
 # File paths for inputs and outputs
 phoneme_mapping_file = '/srv/scratch/z5369417/AKT_data_processing/AusKidTalk_transcription.xlsx'  # Path to the Excel file
 hce_phonemes_file = '/srv/scratch/z5369417/AKT_data_processing/HCE_phonemes.xlsx'  # Path to the HCE phonemes file
-akt_dataset_path = '/srv/scratch/z5369417/created_dataset_0808/AKT_dataset'  # Path to the AKT dataset
-output_path = '/srv/scratch/z5369417/outputs/phonemization_AKT'  # Path to save the phonemized dataset
+akt_dataset_path = '/srv/scratch/z5369417/created_dataset_3009/AKT_exclude_noise'  # Path to the AKT dataset
+output_path = '/srv/scratch/z5369417/outputs/phonemization_AKT2'  # Path to save the phonemized dataset
 unknown_words_file = '/srv/scratch/z5369417/outputs/phonemization_AKT/unknown_words.txt'  # Path to save the unknown words
 
 # Run the main function
