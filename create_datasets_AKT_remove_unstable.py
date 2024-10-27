@@ -156,17 +156,15 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
 
             # Append the dataset to train or test split based on SSD status
             # Apply first and second sorting criteria
-            if ssd_status == 0:
-                # Children without SSD, initial 'train' designation
-                for i, segment in enumerate(dataset):
-                    if error_counts[i] < 2:
-                        train_datasets.append(segment)  # Add to train if error count < 2
-                    else:
-                        test_datasets.append(segment)  # Move to test if error count >= 2
-            else:
-                # Children with SSD, initial 'test' designation
-                for i, segment in enumerate(dataset):
-                    test_datasets.append(segment)  # All segments for SSD in 'test'
+            for i, segment in enumerate(dataset):
+                # Convert each segment to a Dataset object
+                segment_dataset = Dataset.from_dict({key: [value] for key, value in segment.items()})
+
+                # Add to train or test based on SSD and error count criteria
+                if ssd_status == 0 and error_counts[i] < 2:
+                    train_datasets.append(segment_dataset)
+                else:
+                    test_datasets.append(segment_dataset)
 
             # Add to processed_ids
             processed_ids.append(speaker_id)
