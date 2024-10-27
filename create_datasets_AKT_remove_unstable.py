@@ -135,8 +135,8 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
    
     processed_ids = []
     missing_data_ids = []
-    train_datasets = []
-    test_datasets = []
+    train_data = {"audio": [], "text": [], "speaker_id": [], "age": [], "gender": []}
+    test_data = {"audio": [], "text": [], "speaker_id": [], "age": [], "gender": []}
     all_error_counts = []
 
 
@@ -156,22 +156,16 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
 
             # Append the dataset to train or test split based on SSD status
             # Apply first and second sorting criteria
-            train_segments = []
-            test_segments = []
             for i, segment in enumerate(dataset):
                 # Convert each segment to a Dataset object
-                segment_data = {key: [value] for key, value in segment.items()}  # Ensure segment is structured properly
-                segment_dataset = Dataset.from_dict(segment_data)
+                segment_data = {key: segment[key][0] for key in segment.keys()}
                 # Add to train or test based on SSD and error count criteria
                 if ssd_status == 0 and error_counts[i] < 2:
-                    train_segments.append(segment_dataset)
+                    for key in train_data:
+                        train_data[key].append(segment_data[key])
                 else:
-                    test_segments.append(segment_dataset)
-            # Combine segments back into one Dataset for each speaker
-            if train_segments:
-                train_datasets.append(concatenate_datasets(train_segments))
-            if test_segments:
-                test_datasets.append(concatenate_datasets(test_segments))
+                    for key in test_data:
+                        test_data[key].append(segment_data[key])
 
             # Add to processed_ids
             processed_ids.append(speaker_id)
@@ -180,15 +174,19 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
             missing_data_ids.append(speaker_id)
 
     # Combine all datasets for train and test splits
-    if train_datasets:
-        train_dataset = concatenate_datasets(train_datasets)
-    if test_datasets:
-        test_dataset = concatenate_datasets(test_datasets)
+    if train_data["audio"]:
+        train_dataset = Dataset.from_dict(train_data).cast_column("audio", Audio())
+    else:
+        train_dataset = None
+    if test_data["audio"]:
+        test_dataset = Dataset.from_dict(test_data).cast_column("audio", Audio())
+    else:
+        test_dataset = None
 
     # Create a DatasetDict with 'train' and 'test' splits
     dataset_dict = DatasetDict({
-        "train": train_dataset if train_datasets else None,
-        "test": test_dataset if test_datasets else None
+        "train": train_dataset,
+        "test": test_dataset
     })
 
     # Save the DatasetDict to disk
