@@ -65,10 +65,30 @@ def calculate_statistics(data_dir, demographic_csv, annotation_file):
 
     # Define experiment settings
     experiments = {
-        "Exp14": {"remove_3_years": False, "move_high_error_segments": False, "exclude_high_error_segments": False},
-        "Exp16": {"remove_3_years": True, "move_high_error_segments": True, "exclude_high_error_segments": False},
-        "Exp17": {"remove_3_years": True, "move_high_error_segments": False, "exclude_high_error_segments": True},
-        "Exp18": {"remove_3_years": True, "move_high_error_segments": False, "age_balanced_test_set": True}
+        "Exp14": {
+            "remove_3_years": False, 
+            "move_high_error_segments": False, 
+            "exclude_high_error_segments": False, 
+            "age_balanced_test_set": False
+        },
+        "Exp16": {
+            "remove_3_years": True, 
+            "move_high_error_segments": True, 
+            "exclude_high_error_segments": False, 
+            "age_balanced_test_set": False
+        },
+        "Exp17": {
+            "remove_3_years": True, 
+            "move_high_error_segments": False, 
+            "exclude_high_error_segments": True, 
+            "age_balanced_test_set": False
+        },
+        "Exp18": {
+            "remove_3_years": True, 
+            "move_high_error_segments": False, 
+            "exclude_high_error_segments": False, 
+            "age_balanced_test_set": True
+        }
     }
 
     for exp_name, settings in experiments.items():
