@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import librosa
-from datasets import load_from_disk, DatasetDict, Dataset
+from datasets import load_from_disk
 from collections import Counter
 
 def load_demographic_data(demographic_csv):
@@ -55,6 +55,9 @@ def calculate_statistics_for_experiments(experiment_paths, demographic_csv, anno
         csv_files = {os.path.splitext(f)[0].replace('_task1_kaldi', ''): os.path.join(data_dir, f) 
                      for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv') and not f.endswith('_log.csv')}
 
+        # Experiment-specific settings (remove 3-year-olds if applicable)
+        remove_age_3 = exp_name in ["Exp16", "Exp18"]
+
         # Initialize statistics for this experiment
         total_train_duration, total_test_duration = 0, 0
         train_segments, test_segments = 0, 0
@@ -64,6 +67,10 @@ def calculate_statistics_for_experiments(experiment_paths, demographic_csv, anno
         for split in ['train', 'test']:
             speakers = set(dataset[split]['speaker_id'])
             for speaker_id in speakers:
+                # Apply age-based filtering for specific experiments
+                if remove_age_3 and demographic_data.get(speaker_id, {}).get("Age_yrs") == 3:
+                    continue  # Skip 3-year-olds if required by experiment settings
+
                 # Skip if speaker ID does not have corresponding WAV/CSV files
                 if str(speaker_id) not in wav_files or str(speaker_id) not in csv_files:
                     continue
@@ -101,11 +108,11 @@ def calculate_statistics_for_experiments(experiment_paths, demographic_csv, anno
 
         # Age range and gender distribution
         def get_age_range(speakers):
-            ages = [demographic_data[speaker_id]['Age_yrs'] for speaker_id in speakers if speaker_id in demographic_data]
+            ages = [demographic_data[speaker_id]['Age_yrs'] for speaker_id in speakers if speaker_id in demographic_data and (not remove_age_3 or demographic_data[speaker_id]['Age_yrs'] != 3)]
             return (min(ages), max(ages)) if ages else (None, None)
 
         def get_gender_distribution(speakers):
-            genders = [demographic_data[speaker_id]['Gender'] for speaker_id in speakers if speaker_id in demographic_data]
+            genders = [demographic_data[speaker_id]['Gender'] if demographic_data[speaker_id]['Gender'] else "Unknown" for speaker_id in speakers if speaker_id in demographic_data]
             return Counter(genders)
 
         age_range_overall = get_age_range(unique_speakers)
