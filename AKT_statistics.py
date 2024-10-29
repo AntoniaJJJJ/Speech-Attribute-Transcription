@@ -16,7 +16,6 @@ def load_demographic_data(demographic_csv):
 def read_csv(csv_path):
     """Read the CSV file for a given speaker and extract intervals with word annotations."""
     df = pd.read_csv(csv_path)
-    # Extract start time, end time, and word text for each row
     data = [{"start_time": row['tmin'], "end_time": row['tmax'], "word": row['text']} for _, row in df.iterrows()]
     return data
 
@@ -25,15 +24,11 @@ def split_audio(wav_path, segments):
     audio_data, original_sr = librosa.load(wav_path, sr=44100)
     audio_data_16k = librosa.resample(audio_data, orig_sr=original_sr, target_sr=16000)
 
-    # Initialize a list to hold segment durations
     segment_durations = []
     for segment in segments:
-        # Convert start/end times from seconds to sample indices
         start_sample = int(segment["start_time"] * 16000)
         end_sample = int(segment["end_time"] * 16000)
-        # Slice the downsampled audio segment
         segment_audio = audio_data_16k[start_sample:end_sample]
-        # Calculate duration in seconds
         duration = len(segment_audio) / 16000
         segment_durations.append(duration)
 
@@ -42,13 +37,8 @@ def split_audio(wav_path, segments):
 def calculate_error_counts(speaker_id, annotation_df):
     """Calculate error counts for each segment based on 'Difference' columns in annotation data."""
     error_cols = [col for col in annotation_df.columns if 'Difference' in col]
-    
-    # Select rows for the current speaker and relevant error columns
     speaker_data = annotation_df[annotation_df['Child_ID'] == int(speaker_id)][error_cols]
-    
-    # Count non-null values in each row (segment) to get the error count for each segment
     error_counts = speaker_data.notna().sum(axis=1).tolist()
-    
     return error_counts
 
 def calculate_statistics(data_dir, demographic_csv, annotation_file):
@@ -104,10 +94,12 @@ def calculate_statistics(data_dir, demographic_csv, annotation_file):
 
             # Apply age-based filtering for experiments that exclude 3-year-olds
             if settings['remove_3_years'] and age == 3:
+                print(f"Skipping 3-year-old speaker {speaker_id} in {exp_name}")
                 continue
 
             # Verify if files for this speaker exist
             if speaker_id not in wav_files or speaker_id not in csv_files:
+                print(f"Missing files for speaker {speaker_id}")
                 continue
 
             wav_path = wav_files[speaker_id]
@@ -149,8 +141,7 @@ def calculate_statistics(data_dir, demographic_csv, annotation_file):
                     test_error_count += sum(error_counts)
                     test_speakers.add(speaker_id)
 
-        # Demographics and age range
-        unique_speakers = train_speakers | test_speakers
+        # Calculate and print demographics and age range
         def get_age_range(speakers):
             ages = [demographic_data[int(speaker)]['Age_yrs'] for speaker in speakers if demographic_data.get(int(speaker))]
             return (min(ages), max(ages)) if ages else (None, None)
@@ -159,16 +150,16 @@ def calculate_statistics(data_dir, demographic_csv, annotation_file):
             genders = [demographic_data[int(speaker)].get('Gender', 'Unknown') for speaker in speakers if demographic_data.get(int(speaker))]
             return Counter(genders)
 
-        age_range_overall = get_age_range(unique_speakers)
+        age_range_overall = get_age_range(train_speakers | test_speakers)
         age_range_train = get_age_range(train_speakers)
         age_range_test = get_age_range(test_speakers)
 
-        gender_overall = get_gender_distribution(unique_speakers)
+        gender_overall = get_gender_distribution(train_speakers | test_speakers)
         gender_train = get_gender_distribution(train_speakers)
         gender_test = get_gender_distribution(test_speakers)
 
         experiment_results[exp_name] = {
-            "Total Dataset Size (number of speakers)": len(unique_speakers),
+            "Total Dataset Size (number of speakers)": len(train_speakers | test_speakers),
             "Total Train Set Size (number of speakers)": len(train_speakers),
             "Total Test Set Size (number of speakers)": len(test_speakers),
             "Total Dataset Size (Segments)": train_segments + test_segments,
