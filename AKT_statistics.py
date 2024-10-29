@@ -14,7 +14,7 @@ def calculate_durations(data_split):
     return sum(durations), len(durations)
 
 def count_segments_with_errors(speaker_id, data_dir):
-    """Count segments with one or more errors for each speaker using their raw CSV file."""
+    """Count the number of segments with one or more errors for each speaker."""
     csv_path = os.path.join(data_dir, f"{speaker_id}_task1_kaldi.csv")
     if not os.path.exists(csv_path):
         print(f"CSV file not found for speaker {speaker_id}")
@@ -22,7 +22,7 @@ def count_segments_with_errors(speaker_id, data_dir):
 
     df = pd.read_csv(csv_path)
     error_cols = [col for col in df.columns if 'Difference' in col]
-    # Count segments with one or more errors
+    # Count segments with one or more errors by checking if any 'Difference' column is non-null in each row
     segments_with_errors = df[error_cols].notna().any(axis=1).sum()
     return segments_with_errors
 
