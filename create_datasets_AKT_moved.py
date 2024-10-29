@@ -185,8 +185,10 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
                 train_datasets.append(train_dataset)
 
                 # Collect non-SSD speaker details for possible reassignment to test
-                non_ssd_speaker_datasets.append(train_dataset)
-                non_ssd_speaker_details.append((speaker_id, demographic_data[speaker_id]["Age_yrs"]))
+                # Ensure speaker_id exists in demographic_data before accessing it
+                if speaker_id in demographic_data:
+                    non_ssd_speaker_datasets.append(train_dataset)
+                    non_ssd_speaker_details.append((speaker_id, demographic_data[speaker_id]["Age_yrs"]))
             if test_segments:
                 test_dataset = create_dataset_AKT(csv_path, wav_path, speaker_id, demographic_data, test_segments)
                 test_datasets.append(test_dataset)
