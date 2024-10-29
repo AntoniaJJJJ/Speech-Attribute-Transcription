@@ -29,9 +29,6 @@ def load_demographic_data(demographic_csv):
     # Convert SpeakerID to numeric, dropping rows where conversion fails
     demographic_df['SpeakerID'] = pd.to_numeric(demographic_df['SpeakerID'], errors='coerce')
     demographic_df = demographic_df.dropna(subset=['SpeakerID'])
-
-    # Exclude 3-year-olds
-    demographic_df = demographic_df[demographic_df['Age_yrs'] != 3]
     
     # Create a dictionary indexed by SpeakerID
     demographic_dict = demographic_df[['SpeakerID', 'Gender', 'Age_yrs']].set_index('SpeakerID').T.to_dict()
@@ -150,6 +147,11 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
     # Process matching wav and csv files
     for _, row in handcorrected_df.iterrows():
         speaker_id = row['Child_ID']
+
+        # Exclude 3-year-old speakers directly here
+        speaker_info = demographic_data.get(speaker_id, {})
+        if speaker_info.get("Age_yrs") == 3:
+            continue
 
         # Check if the speaker_id has corresponding WAV and CSV files
         if str(speaker_id) in common_files:
