@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 import librosa
-from datasets import load_from_disk
 from collections import Counter
 
 def load_demographic_data(demographic_csv):
@@ -40,79 +39,104 @@ def split_audio(wav_path, segments):
 
     return segment_durations
 
-def calculate_statistics_for_experiments(experiment_paths, demographic_csv, annotation_file, data_dir):
+def calculate_error_counts(speaker_id, annotation_df):
+    """Calculate error counts for each segment based on 'Difference' columns in annotation data."""
+    error_cols = [col for col in annotation_df.columns if 'Difference' in col]
+    
+    # Select rows for the current speaker and relevant error columns
+    speaker_data = annotation_df[annotation_df['Child_ID'] == int(speaker_id)][error_cols]
+    
+    # Count non-null values in each row (segment) to get the error count for each segment
+    error_counts = speaker_data.notna().sum(axis=1).tolist()
+    
+    return error_counts
+
+def calculate_statistics(data_dir, demographic_csv, annotation_file):
     demographic_data = load_demographic_data(demographic_csv)
     annotation_df = pd.read_excel(annotation_file)
+
+    # Create dictionaries to hold paths of wav and csv files
+    wav_files = {os.path.splitext(f)[0].replace('_task1', ''): os.path.join(data_dir, f) 
+                 for f in os.listdir(data_dir) if f.endswith('_task1.wav')}
+    csv_files = {os.path.splitext(f)[0].replace('_task1_kaldi', ''): os.path.join(data_dir, f) 
+                 for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv') and not f.endswith('_log.csv')}
+
     experiment_results = {}
 
-    for exp_name, dataset_path in experiment_paths.items():
-        # Load the dataset for this experiment
-        dataset = load_from_disk(dataset_path)
+    # Define experiment settings
+    experiments = {
+        "Exp14": {"remove_3_years": False, "move_high_error_segments": False, "exclude_high_error_segments": False},
+        "Exp16": {"remove_3_years": True, "move_high_error_segments": True, "exclude_high_error_segments": False},
+        "Exp17": {"remove_3_years": True, "move_high_error_segments": False, "exclude_high_error_segments": True},
+        "Exp18": {"remove_3_years": True, "move_high_error_segments": False, "age_balanced_test_set": True}
+    }
 
-        # Create dictionaries to hold paths of wav and csv files
-        wav_files = {os.path.splitext(f)[0].replace('_task1', ''): os.path.join(data_dir, f) 
-                     for f in os.listdir(data_dir) if f.endswith('_task1.wav')}
-        csv_files = {os.path.splitext(f)[0].replace('_task1_kaldi', ''): os.path.join(data_dir, f) 
-                     for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv') and not f.endswith('_log.csv')}
-
-        # Experiment-specific settings (remove 3-year-olds if applicable)
-        remove_age_3 = exp_name in ["Exp16", "Exp18"]
-
-        # Initialize statistics for this experiment
+    for exp_name, settings in experiments.items():
         total_train_duration, total_test_duration = 0, 0
         train_segments, test_segments = 0, 0
         train_error_count, test_error_count = 0, 0
+        train_speakers, test_speakers = set(), set()
 
-        # Process each speaker in the `train` and `test` splits
-        for split in ['train', 'test']:
-            speakers = set(dataset[split]['speaker_id'])
-            for speaker_id in speakers:
-                # Apply age-based filtering for specific experiments
-                if remove_age_3 and demographic_data.get(speaker_id, {}).get("Age_yrs") == 3:
-                    continue  # Skip 3-year-olds if required by experiment settings
+        for _, row in annotation_df.iterrows():
+            speaker_id = str(row['Child_ID'])
+            ssd_status = row['SSD']
+            age = demographic_data.get(int(speaker_id), {}).get('Age_yrs', None)
 
-                # Skip if speaker ID does not have corresponding WAV/CSV files
-                if str(speaker_id) not in wav_files or str(speaker_id) not in csv_files:
-                    continue
+            # Apply age-based filtering for experiments that exclude 3-year-olds
+            if settings['remove_3_years'] and age == 3:
+                continue
 
-                wav_path = wav_files[str(speaker_id)]
-                csv_path = csv_files[str(speaker_id)]
+            # Verify if files for this speaker exist
+            if speaker_id not in wav_files or speaker_id not in csv_files:
+                continue
 
-                # Read the CSV to get segment start/end times and load the audio file for duration
-                segments = read_csv(csv_path)
-                segment_durations = split_audio(wav_path, segments)
+            wav_path = wav_files[speaker_id]
+            csv_path = csv_files[speaker_id]
+            segments = read_csv(csv_path)
+            segment_durations = split_audio(wav_path, segments)
+            error_counts = calculate_error_counts(speaker_id, annotation_df)
+            high_error_segments = [i for i, count in enumerate(error_counts) if count >= 2]
 
-                # Aggregate statistics based on the split
-                if split == 'train':
+            # Experiment-specific segment handling
+            if settings['move_high_error_segments'] and ssd_status == 0:
+                low_error_durations = [duration for i, duration in enumerate(segment_durations) if i not in high_error_segments]
+                high_error_durations = [duration for i, duration in enumerate(segment_durations) if i in high_error_segments]
+                
+                total_train_duration += sum(low_error_durations)
+                total_test_duration += sum(high_error_durations)
+                train_segments += len(low_error_durations)
+                test_segments += len(high_error_durations)
+                
+                train_error_count += sum([error_counts[i] for i in range(len(error_counts)) if i not in high_error_segments])
+                test_error_count += sum([error_counts[i] for i in range(len(error_counts)) if i in high_error_segments])
+
+            elif settings['exclude_high_error_segments'] and ssd_status == 0:
+                low_error_durations = [duration for i, duration in enumerate(segment_durations) if i not in high_error_segments]
+                
+                total_train_duration += sum(low_error_durations)
+                train_segments += len(low_error_durations)
+                train_error_count += sum([error_counts[i] for i in range(len(error_counts)) if i not in high_error_segments])
+
+            else:
+                if ssd_status == 0:
                     total_train_duration += sum(segment_durations)
                     train_segments += len(segment_durations)
+                    train_error_count += sum(error_counts)
+                    train_speakers.add(speaker_id)
                 else:
                     total_test_duration += sum(segment_durations)
                     test_segments += len(segment_durations)
+                    test_error_count += sum(error_counts)
+                    test_speakers.add(speaker_id)
 
-                # Count errors based on annotation data for this speaker
-                error_cols = [col for col in annotation_df.columns if 'Difference' in col]
-                speaker_errors = annotation_df[annotation_df['Child_ID'] == speaker_id][error_cols].notna().sum(axis=1).sum()
-                if split == 'train':
-                    train_error_count += speaker_errors
-                else:
-                    test_error_count += speaker_errors
-
-        # Collect demographic statistics
-        train_speakers = set(dataset['train']['speaker_id'])
-        test_speakers = set(dataset['test']['speaker_id'])
+        # Demographics and age range
         unique_speakers = train_speakers | test_speakers
-
-        # Total number of speakers
-        total_speakers = len(unique_speakers)
-
-        # Age range and gender distribution
         def get_age_range(speakers):
-            ages = [demographic_data[speaker_id]['Age_yrs'] for speaker_id in speakers if speaker_id in demographic_data and (not remove_age_3 or demographic_data[speaker_id]['Age_yrs'] != 3)]
+            ages = [demographic_data[int(speaker)]['Age_yrs'] for speaker in speakers if demographic_data.get(int(speaker))]
             return (min(ages), max(ages)) if ages else (None, None)
 
         def get_gender_distribution(speakers):
-            genders = [demographic_data[speaker_id]['Gender'] if demographic_data[speaker_id]['Gender'] else "Unknown" for speaker_id in speakers if speaker_id in demographic_data]
+            genders = [demographic_data[int(speaker)].get('Gender', 'Unknown') for speaker in speakers if demographic_data.get(int(speaker))]
             return Counter(genders)
 
         age_range_overall = get_age_range(unique_speakers)
@@ -123,9 +147,8 @@ def calculate_statistics_for_experiments(experiment_paths, demographic_csv, anno
         gender_train = get_gender_distribution(train_speakers)
         gender_test = get_gender_distribution(test_speakers)
 
-        # Store the statistics for this experiment
         experiment_results[exp_name] = {
-            "Total Dataset Size (number of speakers)": total_speakers,
+            "Total Dataset Size (number of speakers)": len(unique_speakers),
             "Total Train Set Size (number of speakers)": len(train_speakers),
             "Total Test Set Size (number of speakers)": len(test_speakers),
             "Total Dataset Size (Segments)": train_segments + test_segments,
@@ -150,18 +173,12 @@ def calculate_statistics_for_experiments(experiment_paths, demographic_csv, anno
             print(f"{stat_name}: {value}")
         print("\n")
 
-# Define the paths for each experiment's output dataset
-experiment_paths = {
-    "Exp14": "/srv/scratch/z5369417/created_dataset_0808/AKT_dataset",
-    "Exp16": "/srv/scratch/z5369417/created_dataset_3009/AKT_exclude_noise",
-    "Exp17": "/srv/scratch/z5369417/created_dataset_3009/AKT_complete_removal",
-    "Exp18": "/srv/scratch/z5369417/created_dataset_3009/AKT_move"
-}
 
+    
 # Define paths to demographic and annotation files and the raw data directory
 demographic_csv = "/srv/scratch/z5369417/AKT_data_processing/AKT_demographic.csv"
 annotation_file = "/srv/scratch/z5369417/AKT_data_processing/AKT_id2diagnosis.xlsx"
 data_dir = "/srv/scratch/z5369417/AKT_data/"
 
 # Run the function to calculate statistics for all experiments
-calculate_statistics_for_experiments(experiment_paths, demographic_csv, annotation_file, data_dir)
+calculate_statistics(data_dir, demographic_csv, annotation_file)
