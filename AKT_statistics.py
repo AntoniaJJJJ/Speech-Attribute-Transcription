@@ -13,8 +13,8 @@ def calculate_durations(data_split):
         durations.append(duration)
     return sum(durations), len(durations)
 
-def count_errors(speaker_id, data_dir):
-    """Count errors for each speaker using their raw CSV file."""
+def count_segments_with_errors(speaker_id, data_dir):
+    """Count segments with one or more errors for each speaker using their raw CSV file."""
     csv_path = os.path.join(data_dir, f"{speaker_id}_task1_kaldi.csv")
     if not os.path.exists(csv_path):
         print(f"CSV file not found for speaker {speaker_id}")
@@ -22,17 +22,20 @@ def count_errors(speaker_id, data_dir):
 
     df = pd.read_csv(csv_path)
     error_cols = [col for col in df.columns if 'Difference' in col]
-    error_count = df[error_cols].notna().sum(axis=1).sum()
-    return error_count
+    # Count segments with one or more errors
+    segments_with_errors = df[error_cols].notna().any(axis=1).sum()
+    return segments_with_errors
 
 def get_age_range_and_gender_distribution(data_split):
-    """Get age range and gender distribution for a split using information directly from the dataset."""
-    ages = [entry['age'] for entry in data_split if entry['age'] is not None]
-    genders = [entry['gender'] if entry['gender'] else 'Unknown' for entry in data_split]
+    """Get age range and gender count by unique speakers in a split."""
+    unique_speakers = {entry['speaker_id']: (entry['age'], entry['gender']) for entry in data_split}
+    
+    ages = [age for age, gender in unique_speakers.values() if age is not None]
+    genders = [gender if gender else 'Unknown' for _, gender in unique_speakers.values()]
     
     age_range = (min(ages), max(ages)) if ages else (None, None)
-    gender_distribution = Counter(genders)
-    return age_range, gender_distribution
+    gender_counts = Counter(genders)
+    return age_range, gender_counts
 
 def calculate_statistics(dataset_path, data_dir, experiment_name):
     # Load the output dataset for the experiment
@@ -46,9 +49,9 @@ def calculate_statistics(dataset_path, data_dir, experiment_name):
     total_train_duration, train_segments = calculate_durations(train_split)
     total_test_duration, test_segments = calculate_durations(test_split)
 
-    # Calculate error counts for train and test
-    train_error_count = sum(count_errors(entry['speaker_id'], data_dir) for entry in train_split)
-    test_error_count = sum(count_errors(entry['speaker_id'], data_dir) for entry in test_split)
+    # Calculate the number of segments with one or more errors for train and test
+    train_segments_with_errors = sum(count_segments_with_errors(entry['speaker_id'], data_dir) for entry in train_split)
+    test_segments_with_errors = sum(count_segments_with_errors(entry['speaker_id'], data_dir) for entry in test_split)
 
     # Calculate age range and gender distribution for train and test
     age_range_train, gender_distribution_train = get_age_range_and_gender_distribution(train_split)
@@ -64,8 +67,8 @@ def calculate_statistics(dataset_path, data_dir, experiment_name):
     print(f"Total Test Set Size (Segments): {test_segments}")
     print(f"Total Segment Duration (Train): {total_train_duration}")
     print(f"Total Segment Duration (Test): {total_test_duration}")
-    print(f"Average Error Count per Segment (Train): {train_error_count / train_segments if train_segments else 0}")
-    print(f"Average Error Count per Segment (Test): {test_error_count / test_segments if test_segments else 0}")
+    print(f"Number of Segments with Errors (Train): {train_segments_with_errors}")
+    print(f"Number of Segments with Errors (Test): {test_segments_with_errors}")
     print(f"Age Range of Speakers (Train): {age_range_train}")
     print(f"Age Range of Speakers (Test): {age_range_test}")
     print(f"Gender Distribution (Train): Male: {gender_distribution_train['Male']}, Female: {gender_distribution_train['Female']}, Unknown: {gender_distribution_train.get('Unknown', 0)}")
