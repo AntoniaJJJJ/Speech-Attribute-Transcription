@@ -215,7 +215,7 @@ def create_dataset_dict_AKT(data_dir, demographic_csv, annotation_file, output_d
 
 data_directory = "/srv/scratch/z5369417/AKT_data/"  # Both CSV and WAV files are in the same folder
 demographic_csv = "/srv/scratch/z5369417/AKT_data_processing/AKT_demographic.csv"
-output_directory = "/srv/scratch/z5369417/created_dataset_3009/AKT_exclude_noise"
+output_directory = "/srv/scratch/z5369417/created_dataset_3009/AKT_complete_removal"
 annotation_file = "/srv/scratch/z5369417/AKT_data_processing/AKT_id2diagnosis.xlsx" 
 create_dataset_dict_AKT(data_directory, demographic_csv, annotation_file, output_directory)
 print(f'Dataset saved to {output_directory}')
