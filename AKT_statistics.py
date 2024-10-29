@@ -50,14 +50,13 @@ def calculate_statistics(dataset_path, data_dir, experiment_name):
     train_error_count = sum(count_errors(entry['speaker_id'], data_dir) for entry in train_split)
     test_error_count = sum(count_errors(entry['speaker_id'], data_dir) for entry in test_split)
 
-    # Calculate age range and gender distribution
+    # Calculate age range and gender distribution for train and test
     age_range_train, gender_distribution_train = get_age_range_and_gender_distribution(train_split)
     age_range_test, gender_distribution_test = get_age_range_and_gender_distribution(test_split)
-    age_range_overall, gender_distribution_overall = get_age_range_and_gender_distribution(train_split + test_split)
 
     # Print statistics for the experiment
     print(f"--- Statistics for {experiment_name} ---")
-    print(f"Total Dataset Size (number of speakers): {len(set(entry['speaker_id'] for entry in train_split + test_split))}")
+    print(f"Total Dataset Size (number of speakers): {len(set(entry['speaker_id'] for entry in train_split)) + len(set(entry['speaker_id'] for entry in test_split))}")
     print(f"Total Train Set Size (number of speakers): {len(set(entry['speaker_id'] for entry in train_split))}")
     print(f"Total Test Set Size (number of speakers): {len(set(entry['speaker_id'] for entry in test_split))}")
     print(f"Total Dataset Size (Segments): {train_segments + test_segments}")
@@ -67,12 +66,10 @@ def calculate_statistics(dataset_path, data_dir, experiment_name):
     print(f"Total Segment Duration (Test): {total_test_duration}")
     print(f"Average Error Count per Segment (Train): {train_error_count / train_segments if train_segments else 0}")
     print(f"Average Error Count per Segment (Test): {test_error_count / test_segments if test_segments else 0}")
-    print(f"Age Range of Speakers (Overall): {age_range_overall}")
     print(f"Age Range of Speakers (Train): {age_range_train}")
     print(f"Age Range of Speakers (Test): {age_range_test}")
-    print(f"Gender Distribution (Overall): {gender_distribution_overall}")
-    print(f"Gender Distribution (Train): {gender_distribution_train}")
-    print(f"Gender Distribution (Test): {gender_distribution_test}")
+    print(f"Gender Distribution (Train): Male: {gender_distribution_train['Male']}, Female: {gender_distribution_train['Female']}, Unknown: {gender_distribution_train.get('Unknown', 0)}")
+    print(f"Gender Distribution (Test): Male: {gender_distribution_test['Male']}, Female: {gender_distribution_test['Female']}, Unknown: {gender_distribution_test.get('Unknown', 0)}")
     print("\n")
 
 # Example usage for multiple experiments
