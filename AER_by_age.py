@@ -50,19 +50,10 @@ def calculate_aer_by_age_for_experiment(exp_path: str):
                 # Collect predictions and targets for this attribute across the age group
                 preds = [item["pred_str"][attr_idx] for item in entries]
                 targets = [item["target_text"][attr_idx] for item in entries]
-
-                # Debugging output to inspect the values
-                print(f"\n--- Debug: Age {age}, Attribute {attr} ---")
-                print("Predictions (pred_str):", preds)
-                print("Targets (target_text):", targets)
                 
                 # Calculate AER using metric.compute
-                wer = metric.compute(predictions=preds, references=targets)
-                aer = 1 - wer  # Convert WER to AER
-                age_aer_results[attr] = aer
-
-                # More debugging information
-                print(f"WER: {wer:.5f}, AER: {aer:.5f}")
+                age_aer_results[attr] = metric.compute(predictions=preds, references=targets)
+                
 
             # Write AER results for this age group to the file
             f.write(f"\nAge: {age}\n")
