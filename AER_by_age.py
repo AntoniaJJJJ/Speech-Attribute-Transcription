@@ -8,7 +8,7 @@ from collections import defaultdict
 metric = evaluate.load("wer")
 
 # Hardcoded path for the attributes list
-attributes_file = "data/list_attributes-hce_Diph.txt"
+attributes_file = "data/list_attributes-camb.txt"
 
 def calculate_aer_by_age_for_experiment(exp_path: str):
     """
