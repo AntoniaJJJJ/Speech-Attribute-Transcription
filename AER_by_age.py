@@ -1,8 +1,8 @@
 import argparse
-from datasets import DatasetDict, Dataset, load_from_disk
-import pandas as pd
+from datasets import DatasetDict, load_from_disk
 import evaluate
 import os
+from collections import defaultdict
 
 # Load the 'wer' metric as specified
 metric = evaluate.load("wer")
@@ -16,7 +16,7 @@ def calculate_aer_by_age_for_experiment(exp_path: str):
     in the same experiment directory.
 
     Parameters:
-    - exp_path: Path to the experiment dataset to analyze.
+    - exp_path: Path to the experiment dataset to analyze
     """
     # Load attributes
     with open(attributes_file, 'r') as f:
@@ -25,9 +25,16 @@ def calculate_aer_by_age_for_experiment(exp_path: str):
     # Define the output file path within the experiment directory
     output_file = os.path.join(exp_path, "aer_by_age.txt")
     
-    # Load dataset
-    dataset = load_from_disk(exp_path)["test"]
-    age_groups = dataset.groupby("age")  # Group by age
+    # Load dataset and select the "test" split
+    dataset_dict = load_from_disk(exp_path)
+    if "test" not in dataset_dict:
+        raise ValueError("The specified dataset does not contain a 'test' split.")
+    dataset = dataset_dict["test"]  # Extract the 'test' split
+
+    # Group entries by age
+    age_groups = defaultdict(list)
+    for entry in dataset:
+        age_groups[entry["age"]].append(entry)
 
     # Open output file for writing results
     with open(output_file, 'w') as f:
@@ -35,7 +42,7 @@ def calculate_aer_by_age_for_experiment(exp_path: str):
         f.write("=====================\n")
 
         # Calculate AER for each age group
-        for age, entries in age_groups:
+        for age, entries in age_groups.items():
             age_aer_results = {}
             
             # Process each attribute group
