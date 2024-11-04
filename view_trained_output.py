@@ -3,12 +3,12 @@ from datasets import load_from_disk
 
 # Define the path to the dataset folders
 result_db_path = '/srv/scratch/z5369417/outputs/trained_result/AKT/exp16/results_test.db' 
-valid_data_path = os.path.join(result_db_path, 'valid')
+#valid_data_path = os.path.join(result_db_path, 'valid')
 test_data_path = os.path.join(result_db_path, 'test')
 
 # Load the datasets
 try:
-    valid_dataset = load_from_disk(valid_data_path)
+    #valid_dataset = load_from_disk(valid_data_path)
     test_dataset = load_from_disk(test_data_path)
     
     # Define the output text files
