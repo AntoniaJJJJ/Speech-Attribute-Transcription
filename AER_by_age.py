@@ -61,6 +61,9 @@ def calculate_aer_by_age_for_experiment(exp_path: str):
                 aer = 1 - wer  # Convert WER to AER
                 age_aer_results[attr] = aer
 
+                # More debugging information
+                print(f"WER: {wer:.5f}, AER: {aer:.5f}")
+
             # Write AER results for this age group to the file
             f.write(f"\nAge: {age}\n")
             for attr, aer in age_aer_results.items():
