@@ -6,7 +6,7 @@ def read_csv(csv_path):
     df = pd.read_csv(csv_path)
     error_cols = [col for col in df.columns if 'Difference' in col]
     df['error_count'] = df[error_cols].notna().sum(axis=1)
-    return df['SpeakerID'], df['error_count']
+    return df['error_count']
 
 # Main function to get children IDs with error_count >= 2 and matching WAV files
 def get_children_with_high_errors(data_dir):
@@ -16,18 +16,21 @@ def get_children_with_high_errors(data_dir):
     csv_files = [f for f in os.listdir(data_dir) if f.endswith('_task1_kaldi.csv')]
 
     for csv_file in csv_files:
+        # Extract the speaker ID from the filename
+        speaker_id = csv_file.replace('_task1_kaldi.csv', '')
+        
+        # Define paths for the CSV and WAV files
         csv_path = os.path.join(data_dir, csv_file)
+        wav_path = os.path.join(data_dir, f"{speaker_id}_task1.wav")
         
         # Check if the corresponding WAV file exists
-        speaker_id_base = csv_file.replace('_task1_kaldi.csv', '')
-        wav_path = os.path.join(data_dir, f"{speaker_id_base}_task1.wav")
-        
         if os.path.exists(wav_path):
-            # Get SpeakerID and error counts from CSV
-            speaker_ids, error_counts = read_csv(csv_path)
+            # Get error counts from CSV
+            error_counts = read_csv(csv_path)
             
-            # Append IDs with error_count >= 2 to the list
-            high_error_ids.extend(speaker_ids[error_counts >= 2].tolist())
+            # If any error count >= 2, add speaker_id to the list
+            if any(error >= 2 for error in error_counts):
+                high_error_ids.append(speaker_id)
 
     return high_error_ids
 
