@@ -33,19 +33,14 @@ F1 Score: 0.833
 
 
 """
-from datasets import load_from_disk
-from sklearn.metrics import precision_recall_fscore_support
-import argparse
-
-
 def get_unique_classes(target_texts):
     """Extract all unique phoneme attribute classes from the target_text column."""
     unique_classes = set()
     for example in target_texts:
         for phoneme_labels in example:
-            if not isinstance(phoneme_labels, list):
-                raise ValueError("Unexpected format: Phoneme labels should be lists.")
-            unique_classes.update(phoneme_labels)
+            # Split space-separated attributes in each string
+            attributes = phoneme_labels.split()
+            unique_classes.update(attributes)
     return sorted(unique_classes)
 
 
@@ -58,10 +53,10 @@ def convert_to_binary_matrix(data, unique_classes):
     binary_matrix = []
     for sequence in data:
         for phoneme_labels in sequence:
-            if not isinstance(phoneme_labels, list):
-                raise ValueError("Unexpected format: Phoneme labels should be lists.")
+            # Split space-separated attributes in each string
+            attributes = phoneme_labels.split()
             row = [0] * len(unique_classes)
-            for label in phoneme_labels:
+            for label in attributes:
                 if label not in class_to_index:
                     raise ValueError(f"Unexpected label '{label}' in data.")
                 row[class_to_index[label]] = 1
@@ -94,14 +89,6 @@ def process_dataset(dataset_path):
     target_texts = dataset['target_text']
     pred_strs = dataset['pred_str']
 
-    # Debugging: Print the first few examples of target_text and pred_str
-    print("First few target_text examples:")
-    for i in range(min(5, len(target_texts))):
-        print(f"Example {i}: {target_texts[i]}")
-    print("\nFirst few pred_str examples:")
-    for i in range(min(5, len(pred_strs))):
-        print(f"Example {i}: {pred_strs[i]}")
-
     # Extract unique classes
     unique_classes = get_unique_classes(target_texts)
     print(f"Number of unique classes: {len(unique_classes)}")
@@ -124,6 +111,7 @@ def process_dataset(dataset_path):
     print(f"Precision: {pre_macro:.3f}")
     print(f"Recall: {rec_macro:.3f}")
     print(f"F1 Score: {f1_macro:.3f}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Calculate Precision, Recall, and F1 scores for multilabel speech recognition results.")
