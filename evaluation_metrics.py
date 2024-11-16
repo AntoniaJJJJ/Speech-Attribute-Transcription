@@ -33,17 +33,18 @@ F1 Score: 0.833
 
 
 """
-
 from datasets import load_from_disk
 from sklearn.metrics import precision_recall_fscore_support
 import argparse
 
 
 def get_unique_classes(target_texts):
-    """Extract all unique classes from the target_text column."""
+    """Extract all unique phoneme attribute classes from the target_text column."""
     unique_classes = set()
     for example in target_texts:
         for phoneme_labels in example:
+            if not isinstance(phoneme_labels, list):
+                raise ValueError("Unexpected format: Phoneme labels should be lists.")
             unique_classes.update(phoneme_labels)
     return sorted(unique_classes)
 
@@ -57,8 +58,12 @@ def convert_to_binary_matrix(data, unique_classes):
     binary_matrix = []
     for sequence in data:
         for phoneme_labels in sequence:
+            if not isinstance(phoneme_labels, list):
+                raise ValueError("Unexpected format: Phoneme labels should be lists.")
             row = [0] * len(unique_classes)
             for label in phoneme_labels:
+                if label not in class_to_index:
+                    raise ValueError(f"Unexpected label '{label}' in data.")
                 row[class_to_index[label]] = 1
             binary_matrix.append(row)
     return binary_matrix, class_to_index
@@ -92,6 +97,7 @@ def process_dataset(dataset_path):
     # Extract unique classes
     unique_classes = get_unique_classes(target_texts)
     print(f"Number of unique classes: {len(unique_classes)}")
+    print(f"Classes: {unique_classes}")
 
     # Convert target_text and pred_str to binary matrices
     y_true, class_to_index = convert_to_binary_matrix(target_texts, unique_classes)
