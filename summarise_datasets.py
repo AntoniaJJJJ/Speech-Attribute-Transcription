@@ -3,14 +3,12 @@ from datasets import load_from_disk
 
 def summarize_dataset_statistics(dataset_path, dataset_name):
     """
-    Summarizes statistics for the given dataset.
+    Summarizes statistics for the given dataset, including unique speakers,
+    total segments, and total audio duration.
     
     Arguments:
     - dataset_path: str, Path to the dataset directory
     - dataset_name: str, Name of the dataset (e.g., CU or AKT)
-    
-    Returns:
-    - summary: dict, Contains statistics like unique speakers, total segments, and total duration
     """
     # Load the dataset
     dataset = load_from_disk(dataset_path)
@@ -29,8 +27,11 @@ def summarize_dataset_statistics(dataset_path, dataset_name):
         # Number of segments
         total_segments = len(data)
         
-        # Total duration in hours
-        total_duration_seconds = sum(data['duration'])  # Assuming 'duration' is in seconds
+        # Compute total duration in seconds
+        total_duration_seconds = sum(
+            len(item['audio']['array']) / item['audio']['sampling_rate']
+            for item in data
+        )
         total_duration_hours = total_duration_seconds / 3600
         
         print(f"  {split.capitalize()} Split:")
