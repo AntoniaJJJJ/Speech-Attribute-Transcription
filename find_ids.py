@@ -3,10 +3,19 @@ import pandas as pd
 
 # Function to read a CSV file and compute total error count for a speaker
 def compute_total_error(csv_path):
-    df = pd.read_csv(csv_path)
-    error_cols = [col for col in df.columns if 'Difference' in col]
-    df['error_count'] = df[error_cols].notna().sum(axis=1)
-    return df['error_count'].sum()
+    try:
+        # Read the CSV file
+        df = pd.read_csv(csv_path, error_bad_lines=False, warn_bad_lines=True)
+        
+        # Identify columns with "Difference" in their name
+        error_cols = [col for col in df.columns if 'Difference' in col]
+        
+        # Compute error count
+        df['error_count'] = df[error_cols].notna().sum(axis=1)
+        return df['error_count'].sum()
+    except Exception as e:
+        print(f"Error processing file {csv_path}: {e}")
+        return 0
 
 # Main function to process CSV files and compute error counts
 def generate_error_report(data_dir, output_excel):
