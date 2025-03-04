@@ -82,6 +82,7 @@ def phonemize_text(text, phoneme_dict, hce_phonemes, unknown_words):
         if word in phoneme_dict:
             transcription = phoneme_dict[word]
             # Split the transcription based on HCE phonemes
+            hce_phonemes = sorted(hce_phonemes, key=len, reverse=True)  # Sort longest first
             pattern = '|'.join([re.escape(p) for p in hce_phonemes])  # Regex pattern from HCE phonemes
             separated_phonemes = re.findall(pattern, transcription)  # Extract matching phonemes
             
