@@ -40,7 +40,7 @@ def preprocess_sample(sample):
 
     # Prepare structured output
     return {
-        "phonemes_speechocean": " ".join(phonemes),  # Convert phoneme list to a string
+        "phoneme_speechocean": " ".join(phonemes),  # Convert phoneme list to a string
         "labels": torch.tensor(labels, dtype=torch.long),  # Convert labels to tensor
         "text": sample["text"],
         "audio": sample["audio"]["array"],  # Keep raw audio
