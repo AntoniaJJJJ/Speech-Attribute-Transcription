@@ -34,7 +34,7 @@ def preprocess_sample(sample):
     
     for word in sample["words"]:
         for i, phone in enumerate(word["phones"]):
-            phonemes.append(phone)
+            phonemes.append(phone.lower())
             # Convert accuracy score to mispronunciation label (1 = error, 0 = correct)
             labels.append(0 if word["phones-accuracy"][i] >= 2.0 else 1)
 
