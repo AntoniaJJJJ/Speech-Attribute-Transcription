@@ -24,7 +24,12 @@ Each entry contains:
 """
 
 import torch
+import re
 from datasets import DatasetDict, load_dataset
+
+# Function to remove stress markers from vowels (AH0 -> AH, AH1 -> AH)
+def remove_stress(phoneme):
+    return re.sub(r'([A-Z]+)[0-2]$', r'\1', phoneme)  # Removes final digit if it exists
 
 # Function to preprocess each sample
 def preprocess_sample(sample):
@@ -34,7 +39,8 @@ def preprocess_sample(sample):
     
     for word in sample["words"]:
         for i, phone in enumerate(word["phones"]):
-            phonemes.append(phone.lower())
+            clean_phone = remove_stress(phone.lower())  # Convert to lowercase and remove stress
+            phonemes.append(clean_phone)
             # Convert accuracy score to mispronunciation label (1 = error, 0 = correct)
             labels.append(0 if word["phones-accuracy"][i] >= 2.0 else 1)
 
