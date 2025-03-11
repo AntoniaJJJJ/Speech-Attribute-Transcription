@@ -47,10 +47,9 @@ def preprocess_sample(sample):
     # Prepare structured output
     return {
         "phoneme_speechocean": " ".join(phonemes),  # Convert phoneme list to a string
-        "labels": torch.tensor(labels, dtype=torch.long),  # Convert labels to tensor
+        "labels": torch.tensor(labels, dtype=torch.long).tolist(),  # Ensure tensor format
         "text": sample["text"],
-        "audio": sample["audio"]["array"],  # Keep raw audio
-        "sampling_rate": sample["audio"]["sampling_rate"],
+        "audio": {"array": sample["audio"], "sampling_rate": sample["sampling_rate"]},  # Ensure audio is in array not list for train.py
     }
 
 # Load the dataset
