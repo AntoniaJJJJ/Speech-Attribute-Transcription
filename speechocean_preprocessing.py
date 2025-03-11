@@ -29,7 +29,7 @@ from datasets import DatasetDict, load_dataset
 
 # Function to remove stress markers from vowels (AH0 -> AH, AH1 -> AH)
 def remove_stress(phoneme):
-    return re.sub(r'([A-Z]+)[0-2]$', r'\1', phoneme)  # Removes final digit if it exists
+    return re.sub(r'([a-z]+)[0-2]$', r'\1', phoneme)  # Removes final digit if it exists
 
 # Function to preprocess each sample
 def preprocess_sample(sample):
