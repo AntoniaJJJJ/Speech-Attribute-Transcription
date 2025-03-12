@@ -1,8 +1,7 @@
 import argparse
 from datasets import load_from_disk
 import pandas as pd
-from collections import defaultdict
-import ace_tools as tools
+import os
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Mispronunciation Detection Script")
@@ -11,6 +10,9 @@ args = parser.parse_args()
 
 # Load the evaluation results dataset
 ds_results = load_from_disk(args.data_path)
+
+# Determine the output directory (same as data_path directory)
+output_dir = os.path.dirname(args.data_path)
 
 # Store mispronunciations
 mispronunciations = []
@@ -39,6 +41,10 @@ df_mispronunciations = pd.DataFrame(mispronunciations)
 phoneme_errors = df_mispronunciations["phoneme"].value_counts().reset_index()
 phoneme_errors.columns = ["Phoneme", "Mispronunciation Count"]
 
-# Display results
-tools.display_dataframe_to_user(name="Mispronunciations", dataframe=df_mispronunciations)
-tools.display_dataframe_to_user(name="Phoneme Mispronunciation Counts", dataframe=phoneme_errors)
+# Define output file paths
+mispronunciations_file = os.path.join(output_dir, "mispronunciations.csv")
+phoneme_errors_file = os.path.join(output_dir, "phoneme_mispronunciation_counts.csv")
+
+# Save results to CSV
+df_mispronunciations.to_csv(mispronunciations_file, index=False)
+phoneme_errors.to_csv(phoneme_errors_file, index=False)
