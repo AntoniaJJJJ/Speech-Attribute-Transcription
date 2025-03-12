@@ -50,6 +50,11 @@ for sample in ds_results["test"]:
                 "ground_truth_label": "Mispronounced" if label == 1 else "Correct"
             })
 
+# Compute Precision, Recall, and F1-score
+precision = metrics["TP"] / (metrics["TP"] + metrics["FP"]) if (metrics["TP"] + metrics["FP"]) > 0 else 0
+recall = metrics["TP"] / (metrics["TP"] + metrics["FN"]) if (metrics["TP"] + metrics["FN"]) > 0 else 0
+f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
 # Convert to a DataFrame for analysis
 df_mispronunciations = pd.DataFrame(mispronunciations)
 
@@ -66,6 +71,9 @@ metrics_file = os.path.join(output_dir, "mdd_metrics.csv")
 df_mispronunciations.to_csv(mispronunciations_file, index=False)
 phoneme_errors.to_csv(phoneme_errors_file, index=False)
 
-# Save TP, FP, TN, FN metrics
+# Save TP, FP, TN, FN, Precision, Recall, and F1-score
+metrics["Precision"] = precision
+metrics["Recall"] = recall
+metrics["F1-score"] = f1_score
 df_metrics = pd.DataFrame([metrics])
 df_metrics.to_csv(metrics_file, index=False)
