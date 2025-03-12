@@ -2,6 +2,7 @@ import argparse
 from datasets import load_from_disk
 import pandas as pd
 from collections import defaultdict
+import ace_tools as tools
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Mispronunciation Detection Script")
@@ -39,6 +40,5 @@ phoneme_errors = df_mispronunciations["phoneme"].value_counts().reset_index()
 phoneme_errors.columns = ["Phoneme", "Mispronunciation Count"]
 
 # Display results
-import ace_tools as tools
 tools.display_dataframe_to_user(name="Mispronunciations", dataframe=df_mispronunciations)
 tools.display_dataframe_to_user(name="Phoneme Mispronunciation Counts", dataframe=phoneme_errors)
