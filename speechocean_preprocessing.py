@@ -97,7 +97,7 @@ def preprocess_sample(sample, split):
 
                         # **If `<unk>`, remove**
                         if spoken_phone == "<unk>":
-                            sstats[split]["phonemes_removed_unk"] += 1
+                            stats[split]["phonemes_removed_unk"] += 1
                             removed = True
                             continue
                         
