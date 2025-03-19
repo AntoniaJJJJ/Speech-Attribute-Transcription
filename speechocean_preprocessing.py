@@ -119,7 +119,15 @@ def preprocess_sample(sample):
     stats["total_sentences"] += 1
     if removed:
         stats["removed_sentences"] += 1
-        return {}  # Remove this sentence
+        # Remove this sentence
+        return {
+        "phoneme_speechocean": "",  # Empty string instead of missing key
+        "actual_spoken_phonemes": "",
+        "labels": [],
+        "text": "",
+        "audio": {"array": [], "sampling_rate": 16000},  # Empty array, default sampling rate
+        "age": -1  # Use -1 as a placeholder for filtered samples
+        }
     
     if has_mispronunciation:
         stats["mispronounced_sentences"] += 1
@@ -145,8 +153,8 @@ ds_filtered = ds.filter(lambda x: x["age"] <= 11)
 # Apply preprocessing to both train and test sets
 ds_preprocessed = ds_filtered.map(preprocess_sample)
 
-# Remove `None` entries (deleted samples)
-ds_preprocessed = ds_preprocessed.filter(lambda x: x is not None)
+# Remove uncertain entries (deleted samples)
+ds_preprocessed = ds_preprocessed.filter(lambda x: x["age"] != -1)
 
 # Save the dataset
 ds_preprocessed.save_to_disk("/srv/scratch/z5369417/outputs/phonemization_speechocean/")
