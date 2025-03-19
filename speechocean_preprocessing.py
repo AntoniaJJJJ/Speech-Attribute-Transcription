@@ -119,7 +119,7 @@ def preprocess_sample(sample):
     stats["total_sentences"] += 1
     if removed:
         stats["removed_sentences"] += 1
-        return None  # Remove this sentence
+        return {}  # Remove this sentence
     
     if has_mispronunciation:
         stats["mispronounced_sentences"] += 1
