@@ -53,7 +53,10 @@ stats = {
         "phonemes_removed_star": 0,  # `*` cases (distortion)
         "phonemes_removed_unk": 0,   # `<unk>` cases
 
-        "mispronunciation_types": {"deletion": 0, "substitution": 0, "insertion": 0, "distortion": 0}
+        "deletion": 0,
+        "substitution": 0,
+        "insertion": 0,
+        "distortion": 0
     },
     "test": {
         "total_sentences": 0,
@@ -68,8 +71,12 @@ stats = {
         "phonemes_removed_star": 0,  # `*` cases (distortion)
         "phonemes_removed_unk": 0,   # `<unk>` cases
 
-        "mispronunciation_types": {"deletion": 0, "substitution": 0, "insertion": 0, "distortion": 0}
-    }
+        "deletion": 0,
+        "substitution": 0,
+        "insertion": 0,
+        "distortion": 0
+    },
+    "total": {}  # Will be computed later
 }
 
 # Function to preprocess each sample
@@ -103,21 +110,21 @@ def preprocess_sample(sample, split):
                         
                         # **Track Mispronunciation Type**
                         if spoken_phone == "<del>":
-                            stats[split]["mispronunciation_types"]["deletion"] += 1
+                            stats[split]["deletion"] += 1
                             has_mispronunciation = True  # Mark sentence as mispronounced
                             continue  # Skip adding this phoneme
                         
                         # **If *, ambiguous pronounciation, remove **
                         if "*" in spoken_phone:  
                             stats[split]["phonemes_removed_star"] += 1
-                            stats[split]["mispronunciation_types"]["distortion"] += 1
+                            stats[split]["distortion"] += 1
                             removed = True
                             continue  # Remove this phoneme
                         
                         # **Substitution Case**
                         if spoken_phone != clean_phone:
                             has_mispronunciation = True
-                            stats[split]["mispronunciation_types"]["substitution"] += 1
+                            stats[split]["substitution"] += 1
             
             # Assign labels  
             label = 1 if accuracy >= 0.5 else 0
@@ -184,10 +191,6 @@ ds_preprocessed.save_to_disk("/srv/scratch/z5369417/outputs/phonemization_speech
 # Save Statistics as Excel
 # Compute Total Statistics
 stats["total"] = {key: stats["train"][key] + stats["test"][key] for key in stats["train"]}
-stats["total"]["mispronunciation_types"] = {
-    key: stats["train"]["mispronunciation_types"][key] + stats["test"]["mispronunciation_types"][key]
-    for key in stats["train"]["mispronunciation_types"]
-}
 
-df_stats = pd.DataFrame.from_dict(stats, orient="index").T
+df_stats = pd.DataFrame(stats).T
 df_stats.to_excel("/srv/scratch/z5369417/outputs/phonemization_speechocean/dataset_statistics.xlsx")
