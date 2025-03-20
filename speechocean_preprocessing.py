@@ -52,6 +52,8 @@ stats = {
 
         "phonemes_removed_star": 0,  # `*` cases (distortion)
         "phonemes_removed_unk": 0,   # `<unk>` cases
+        "phonemes_removed_ar": 0,    # `ar` cases
+        "phonemes_removed_ir": 0,    # `ir` cases
 
         "deletion": 0,
         "substitution": 0,
@@ -70,6 +72,8 @@ stats = {
 
         "phonemes_removed_star": 0,  # `*` cases (distortion)
         "phonemes_removed_unk": 0,   # `<unk>` cases
+        "phonemes_removed_ar": 0,    # `ar` cases
+        "phonemes_removed_ir": 0,    # `ir` cases
 
         "deletion": 0,
         "substitution": 0,
@@ -101,6 +105,15 @@ def preprocess_sample(sample, split):
                 for misp in word["mispronunciations"]:
                     if misp["index"] == i:
                         spoken_phone = misp["pronounced-phone"].lower()
+
+                        # **Remove if 'ar' or 'ir' found**
+                        if spoken_phone in ["ar", "ir"]:
+                            if spoken_phone == "ar":
+                                stats[split]["phonemes_removed_ar"] += 1
+                            if spoken_phone == "ir":
+                                stats[split]["phonemes_removed_ir"] += 1
+                            removed = True  # Mark for removal
+                            continue
 
                         # **If `<unk>`, remove**
                         if spoken_phone == "<unk>":
