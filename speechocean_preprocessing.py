@@ -112,6 +112,9 @@ def preprocess_sample(sample, split):
                         if spoken_phone == "<del>":
                             stats[split]["deletion"] += 1
                             has_mispronunciation = True  # Mark sentence as mispronounced
+
+                            if spoken_phone in spoken_phonemes:
+                                spoken_phonemes.remove(spoken_phone)  # Remove `<del>` if somehow added
                             continue  # Skip adding this phoneme
                         
                         # **If *, ambiguous pronounciation, remove **
