@@ -1,79 +1,97 @@
 import argparse
-from datasets import load_from_disk
 import pandas as pd
-import os
+from datasets import load_from_disk
 
-# Parse command-line arguments
-parser = argparse.ArgumentParser(description="Mispronunciation Detection Script")
-parser.add_argument("--data_path", type=str, required=True, help="Path to the results dataset (e.g., results_speechocean_test.db)")
-args = parser.parse_args()
+phonetic_alphabet = "arpa"
+phoneme_column = f"Phoneme_{phonetic_alphabet}"
+diphthong_map_file = "data/Diphthongs_en_us-arpa.csv"
 
-# Load the evaluation results dataset
-ds_results = load_from_disk(args.data_path)
+# Load Mapping Charts
+def load_phoneme_to_attribute_mapping(phoneme2att_path, decouple_diphthongs):
+    phoneme2att_df = pd.read_csv(phoneme2att_path)
+    phoneme2att_map = {
+        row[phoneme_column].lower(): row["Attributes"].split()
+        for _, row in phoneme2att_df.iterrows()
+    }
 
-# Determine the output directory (same as data_path directory)
-output_dir = os.path.dirname(args.data_path)
+    diphthong_map = {}
+    if decouple_diphthongs:
+        diph_df = pd.read_csv(diphthong_map_file)
+        for _, row in diph_df.iterrows():
+            diph = row["Diphthong"].lower()
+            mono_seq = row["Monophthong Sequence"].lower().split()
+            diphthong_map[diph] = mono_seq
 
-# Store mispronunciations & metrics
-mispronunciations = []
-metrics = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
+    return phoneme2att_map, diphthong_map
 
-# Iterate through test samples
-for sample in ds_results["test"]:
-    text = sample["text"]
-    phonemes = sample["phoneme_speechocean"].split()
-    pred_attributes = sample["pred_str"]
-    target_attributes = sample["target_text"]
-    mispronunciation_labels = sample["labels"]  # 0 = correct, 1 = mispronounced
+def phonemes_to_attributes(phoneme_string, phoneme2att_map, diphthong_map, decouple_diphthongs):
+    phonemes = phoneme_string.strip().split()
+    attr_sequence = []
 
-    # Track mispronounced phonemes and calculate TP, FP, TN, FN
-    for i, (phoneme, pred, target, label) in enumerate(zip(phonemes, pred_attributes, target_attributes, mispronunciation_labels)):
-        model_detected_mispronunciation = (pred != target)  # If predicted attributes mismatch expected attributes
-        ground_truth_mispronunciation = (label == 1)  # 1 = phoneme is actually mispronounced
+    for ph in phonemes:
+        ph = ph.lower()
+        if decouple_diphthongs and ph in diphthong_map:
+            for mono in diphthong_map[ph]:
+                if mono in phoneme2att_map:
+                    attr_sequence.extend(phoneme2att_map[mono])
+        elif ph in phoneme2att_map:
+            attr_sequence.extend(phoneme2att_map[ph])
+        else:
+            print(f" Warning: phoneme '{ph}' not in mapping chart — skipped.")
 
-        if model_detected_mispronunciation and ground_truth_mispronunciation:
-            metrics["TP"] += 1  # True Positive (correctly detected mispronunciation)
-        elif model_detected_mispronunciation and not ground_truth_mispronunciation:
-            metrics["FP"] += 1  # False Positive (incorrectly flagged a correct phoneme)
-        elif not model_detected_mispronunciation and not ground_truth_mispronunciation:
-            metrics["TN"] += 1  # True Negative (correct phoneme correctly classified)
-        elif not model_detected_mispronunciation and ground_truth_mispronunciation:
-            metrics["FN"] += 1  # False Negative (missed a mispronunciation)
+    return attr_sequence
 
-        # Store mispronunciations for analysis
-        if model_detected_mispronunciation:
-            mispronunciations.append({
-                "text": text,
-                "phoneme": phoneme,
-                "predicted": pred,
-                "expected": target,
-                "ground_truth_label": "Mispronounced" if label == 1 else "Correct"
-            })
+# === MDD Logic ===
+def compute_ta_tr_fa_fr(dataset, phoneme2att_map, diphthong_map, decouple_diphthongs):
+    TA, TR, FA, FR = 0, 0, 0, 0
 
-# Compute Precision, Recall, and F1-score
-precision = metrics["TP"] / (metrics["TP"] + metrics["FP"]) if (metrics["TP"] + metrics["FP"]) > 0 else 0
-recall = metrics["TP"] / (metrics["TP"] + metrics["FN"]) if (metrics["TP"] + metrics["FN"]) > 0 else 0
-f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    for sample in dataset:
+        canonical = sample["phoneme_speechocean"]
+        actual_attrs = sample["target_text"]
+        predicted_attrs = sample["pred_str"]
 
-# Convert to a DataFrame for analysis
-df_mispronunciations = pd.DataFrame(mispronunciations)
+        if not canonical or not actual_attrs or not predicted_attrs:
+            continue
 
-# Count mispronunciation occurrences per phoneme
-phoneme_errors = df_mispronunciations["phoneme"].value_counts().reset_index()
-phoneme_errors.columns = ["Phoneme", "Mispronunciation Count"]
+        canonical_attrs = phonemes_to_attributes(
+            canonical, phoneme2att_map, diphthong_map, decouple_diphthongs
+        )
 
-# Define output file paths
-mispronunciations_file = os.path.join(output_dir, "mispronunciations.csv")
-phoneme_errors_file = os.path.join(output_dir, "phoneme_mispronunciation_counts.csv")
-metrics_file = os.path.join(output_dir, "mdd_metrics.csv")
+        for can, act, pred in zip(canonical_attrs, actual_attrs, predicted_attrs):
+            if act == can and pred == act:
+                TA += 1
+            elif act != can and pred == act:
+                TR += 1
+            elif act == can and pred != act:
+                FR += 1
+            elif act != can and pred != act and pred == can:
+                FA += 1
 
-# Save results to CSV
-df_mispronunciations.to_csv(mispronunciations_file, index=False)
-phoneme_errors.to_csv(phoneme_errors_file, index=False)
+    return TA, TR, FA, FR
 
-# Save TP, FP, TN, FN, Precision, Recall, and F1-score
-metrics["Precision"] = precision
-metrics["Recall"] = recall
-metrics["F1-score"] = f1_score
-df_metrics = pd.DataFrame([metrics])
-df_metrics.to_csv(metrics_file, index=False)
+# === Main Script ===
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Mispronunciation Detection Metrics")
+    parser.add_argument("--data_path", type=str, required=True, help="Path to evaluated .db dataset")
+    parser.add_argument("--output_path", type=str, required=True, help="Output Excel file path")
+    parser.add_argument("--phoneme2att_path", type=str, required=True, help="Path to phoneme2att CSV")
+    parser.add_argument("--decouple_diphthongs", type=lambda x: x.lower() == "true", default=False,
+                    help="Whether to decouple diphthongs")
+    args = parser.parse_args()
+
+    ds = load_from_disk(args.data_path)
+    dataset = ds["test"] if "test" in ds else ds
+
+    phoneme2att_map, diphthong_map = load_phoneme_to_attribute_mapping(
+        args.phoneme2att_path, args.decouple_diphthongs
+    )
+
+    TA, TR, FA, FR = compute_ta_tr_fa_fr(dataset, phoneme2att_map, diphthong_map, args.decouple_diphthongs)
+
+    result_df = pd.DataFrame({
+        "Metric": ["True Acceptance (TA)", "True Rejection (TR)", "False Acceptance (FA)", "False Rejection (FR)"],
+        "Count": [TA, TR, FA, FR]
+    })
+
+    result_df.to_excel(args.output_path, index=False)
+    print("Results saved to:", args.output_path)
