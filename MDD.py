@@ -19,14 +19,18 @@ def create_phoneme_binary_mappers(df, attribute_list, phoneme_column):
     phoneme_binary_mappers = []
     for att in attribute_list:
         p2att = {}
-        p_att_phs = df[df[att]==1].index
-        n_att_phs = df[df[att]==0].index
-        for idx in p_att_phs:
-            ph = df.iloc[idx][phoneme_column].lower()
-            p2att[ph] = f'p_{att}'
-        for idx in n_att_phs:
-            ph = df.iloc[idx][phoneme_column].lower()
-            p2att[ph] = f'n_{att}'
+        for _, row in df.iterrows():
+            phoneme = str(row[phoneme_column]).lower()
+            val = row.get(att)
+
+            # Skip if NaN or not 0/1
+            if pd.isna(val) or val not in [0, 1]:
+                continue
+
+            tag = f'p_{att}' if val == 1 else f'n_{att}'
+            p2att[phoneme] = tag
+        if len(p2att) == 0:
+            print(f"[WARN] Skipping empty group for attribute: {att}")
         phoneme_binary_mappers.append(p2att)
     return phoneme_binary_mappers
 
@@ -55,7 +59,6 @@ def compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, should_d
             canonical = decouple_diphthongs(canonical, diphthong_map)
 
         try:
-            print("\n[DEBUG] Canonical phoneme sequence:", canonical)
             canon_attrs = map_canonical_to_attrs(canonical, phoneme_binary_mappers)
         except KeyError as e:
             print(f"Missing phoneme mapping for: {e}")
@@ -99,9 +102,6 @@ if __name__ == "__main__":
     attribute_list = [col for col in df.columns if not col.startswith("Phoneme_") and col != "Attributes"]
     phoneme_binary_mappers = create_phoneme_binary_mappers(df, attribute_list, phoneme_column)
     diphthong_map = load_diphthong_map() if args.decouple_diphthongs else {}
-    print("\n[DEBUG] Sample phonemes from mapping dict:")
-    for i, mapper in enumerate(phoneme_binary_mappers[:2]):
-        print(f"Group {i} keys:", list(mapper.keys())[:10])
 
     # === Compute Metrics ===
     TA, TR, FA, FR = compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, args.decouple_diphthongs)
