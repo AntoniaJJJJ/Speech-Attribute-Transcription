@@ -1,32 +1,21 @@
-import pandas as pd
-from datasets import load_from_disk
+from datasets import load_from_disk, DatasetDict
 
-# === Config ===
-dataset_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4/"
-mapping_csv_path = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_noDiph.csv"
+input_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4"
+output_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean_training"
 
-# === Load dataset ===
-ds = load_from_disk(dataset_path)
+# Load dataset
+dataset = load_from_disk(input_path)
 
-# === Load valid phonemes ===
-mapping_df = pd.read_csv(mapping_csv_path)
-valid_phonemes = set(mapping_df["Phoneme_arpa"].str.lower().tolist())
+# Remove 'labels' field
+def remove_labels(example):
+    if "labels" in example:
+        del example["labels"]
+    return example
 
-# === Collect all unique phonemes from the dataset ===
-all_phonemes = set()
-for split in ["train", "test"]:
-    for sample in ds[split]:
-        if sample["actual_spoken_phonemes"]:
-            phonemes = sample["actual_spoken_phonemes"].strip().split()
-            all_phonemes.update(phonemes)
+# Apply to each split
+dataset_cleaned = DatasetDict()
+for split in dataset:
+    dataset_cleaned[split] = dataset[split].map(remove_labels)
 
-# === Check for missing phonemes ===
-missing_phonemes = sorted(ph for ph in all_phonemes if ph not in valid_phonemes)
-
-# === Output ===
-if missing_phonemes:
-    print("🚫 Missing phonemes found (not in mapping):")
-    for p in missing_phonemes:
-        print(" -", p)
-else:
-    print("✅ All phonemes are valid and present in the mapping.")
+# Save cleaned dataset
+dataset_cleaned.save_to_disk(output_path)
