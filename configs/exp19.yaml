@@ -20,7 +20,7 @@ preprocessor:
     max_length_in_sec: 15 #Speech files longer than 15 seconds will be filtered out due to CUDA out-of-memory error
     save_preprocessed_data: true #will be saved in working_dir/preprocessed_data
     load_from_preprocessed_data: true #will be loaded from working_dir/preprocessed_data if exist else perprocess it
-    decouple_diphthongs: false
+    decouple_diphthongs: true
     diphthongs_to_monophthongs_map_file: 'data/Diphthongs_en_us-arpa.csv'
 
 training:
