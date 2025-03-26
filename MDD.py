@@ -2,22 +2,7 @@ import argparse
 import pandas as pd
 from datasets import load_from_disk
 
-# Load Mapping Charts
-def load_mappings(phoneme2att_map_path):
-    df = pd.read_csv(phoneme2att_map_path)
-    attributes = [col for col in df.columns if col.startswith('p_') or col.startswith('n_') or col == 'Attributes']
-    phoneme_column = [col for col in df.columns if col.startswith('Phoneme_')][0]
-    list_att = list(set(attr[2:] for attr in attributes if '_' in attr))
-    phoneme2att_map = {}
-    for _, row in df.iterrows():
-        phoneme = row[phoneme_column].lower()
-        phoneme2att_map[phoneme] = []
-        for att in list_att:
-            if att in row:
-                tag = 'p_' + att if row[att] == 1 else 'n_' + att
-                phoneme2att_map[phoneme].append(tag)
-    return phoneme2att_map, list_att
-
+# === Mapping Logic ===
 def load_diphthong_map():
     with open("data/Diphthongs_en_us-arpa.csv", "r") as f:
         lines = f.read().splitlines()
@@ -27,8 +12,38 @@ def decouple_diphthongs(phoneme_seq, diph_map):
     tokens = phoneme_seq.split()
     return " ".join(token if token not in diph_map else " ".join(diph_map[token]) for token in tokens)
 
-# === MDD Logic ===
-def compute_ta_tr_fa_fr(dataset, phoneme2att_map, diphthong_map, should_decouple):
+def create_binary_groups(attribute_list):
+    return [[f'p_{att}', f'n_{att}'] for att in attribute_list]
+
+def create_phoneme_binary_mappers(df, attribute_list, phoneme_column):
+    phoneme_binary_mappers = []
+    for att in attribute_list:
+        p2att = {}
+        p_att_phs = df[df[att]==1].index
+        n_att_phs = df[df[att]==0].index
+        for idx in p_att_phs:
+            ph = df.iloc[idx][phoneme_column].lower()
+            p2att[ph] = f'p_{att}'
+        for idx in n_att_phs:
+            ph = df.iloc[idx][phoneme_column].lower()
+            p2att[ph] = f'n_{att}'
+        phoneme_binary_mappers.append(p2att)
+    return phoneme_binary_mappers
+
+def map_canonical_to_attrs(canonical, phoneme_binary_mappers):
+    phonemes = canonical.split()
+    canon_attrs = []
+    for mapper in phoneme_binary_mappers:
+        g_label = []
+        for p in phonemes:
+            if p not in mapper:
+                raise KeyError(p)
+            g_label.append(mapper[p])
+        canon_attrs.append(" ".join(g_label))
+    return canon_attrs
+
+# === MDD Metric Computation ===
+def compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, should_decouple):
     TA, TR, FA, FR = 0, 0, 0, 0
 
     for sample in dataset:
@@ -40,9 +55,13 @@ def compute_ta_tr_fa_fr(dataset, phoneme2att_map, diphthong_map, should_decouple
             canonical = decouple_diphthongs(canonical, diphthong_map)
 
         try:
-            canon_attrs = [" ".join(phoneme2att_map[p]) for p in canonical.split()]
+            canon_attrs = map_canonical_to_attrs(canonical, phoneme_binary_mappers)
         except KeyError as e:
             print(f"Missing phoneme mapping for: {e}")
+            continue
+
+        if not (len(canon_attrs) == len(actual_attrs) == len(predicted_attrs)):
+            print("Skipping sample due to length mismatch.")
             continue
 
         for can, act, pred in zip(canon_attrs, actual_attrs, predicted_attrs):
@@ -64,21 +83,26 @@ if __name__ == "__main__":
     parser.add_argument("--output_path", type=str, required=True, help="Output Excel file path")
     parser.add_argument("--phoneme2att_path", type=str, required=True, help="Path to phoneme2att CSV")
     parser.add_argument("--decouple_diphthongs", type=lambda x: x.lower() == "true", default=False,
-                    help="Whether to decouple diphthongs")
+                        help="Whether to decouple diphthongs")
     args = parser.parse_args()
 
+    # === Setup ===
     phonetic_alphabet = "arpa"
     phoneme_column = f"Phoneme_{phonetic_alphabet}"
-    diphthong_map_file = "data/Diphthongs_en_us-arpa.csv"
 
     ds = load_from_disk(args.data_path)
     dataset = ds["test"] if "test" in ds else ds
 
-    phoneme2att_map, _ = load_mappings(args.phoneme2att_path)
+    # === Load Mapping Info ===
+    df = pd.read_csv(args.phoneme2att_path)
+    attribute_list = [col for col in df.columns if not col.startswith("Phoneme_") and col != "Attributes"]
+    phoneme_binary_mappers = create_phoneme_binary_mappers(df, attribute_list, phoneme_column)
     diphthong_map = load_diphthong_map() if args.decouple_diphthongs else {}
 
-    TA, TR, FA, FR = compute_ta_tr_fa_fr(dataset, phoneme2att_map, diphthong_map, args.decouple_diphthongs)
+    # === Compute Metrics ===
+    TA, TR, FA, FR = compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, args.decouple_diphthongs)
 
+    # === Save Output ===
     result_df = pd.DataFrame({
         "Metric": ["True Acceptance (TA)", "True Rejection (TR)", "False Acceptance (FA)", "False Rejection (FR)"],
         "Count": [TA, TR, FA, FR]
