@@ -31,7 +31,7 @@ def create_phoneme_binary_mappers(df, attribute_list, phoneme_column):
     return phoneme_binary_mappers
 
 def map_canonical_to_attrs(canonical, phoneme_binary_mappers):
-    phonemes = canonical.split()
+    phonemes = canonical.lower().split()
     canon_attrs = []
     for mapper in phoneme_binary_mappers:
         g_label = []
