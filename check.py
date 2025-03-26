@@ -10,7 +10,7 @@ ds = load_from_disk(dataset_path)
 
 # === Load valid phonemes ===
 mapping_df = pd.read_csv(mapping_csv_path)
-valid_phonemes = set(mapping_df["phoneme"].str.lower().tolist())
+valid_phonemes = set(mapping_df["Phoneme_arpa"].str.lower().tolist())
 
 # === Collect all unique phonemes from the dataset ===
 all_phonemes = set()
