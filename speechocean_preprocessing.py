@@ -127,12 +127,19 @@ def preprocess_sample(sample, split):
                             has_mispronunciation = True  # Mark sentence as mispronounced
                             continue  # Skip adding this phoneme
                         
-                        # **If *, ambiguous pronounciation, remove **
+                        """ # **If *, ambiguous pronounciation, remove **
                         if "*" in spoken_phone:  
                             stats[split]["phonemes_removed_star"] += 1
                             stats[split]["distortion"] += 1
                             removed = True
-                            continue  # Remove this phoneme
+                            continue  # Remove this phoneme """
+
+                        # **If *, ambiguous pronunciation: strip *, count as distortion, but keep phoneme**
+                        if "*" in spoken_phone:
+                            spoken_phone = spoken_phone.replace("*", "")
+                            stats[split]["phonemes_removed_star"] += 1
+                            stats[split]["distortion"] += 1
+                            has_mispronunciation = True  # Mark sentence as mispronounced
                         
                         # **Substitution Case**
                         if spoken_phone != clean_phone:
