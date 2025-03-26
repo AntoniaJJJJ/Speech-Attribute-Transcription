@@ -55,6 +55,7 @@ def compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, should_d
             canonical = decouple_diphthongs(canonical, diphthong_map)
 
         try:
+            print("\n[DEBUG] Canonical phoneme sequence:", canonical)
             canon_attrs = map_canonical_to_attrs(canonical, phoneme_binary_mappers)
         except KeyError as e:
             print(f"Missing phoneme mapping for: {e}")
@@ -98,6 +99,9 @@ if __name__ == "__main__":
     attribute_list = [col for col in df.columns if not col.startswith("Phoneme_") and col != "Attributes"]
     phoneme_binary_mappers = create_phoneme_binary_mappers(df, attribute_list, phoneme_column)
     diphthong_map = load_diphthong_map() if args.decouple_diphthongs else {}
+    print("\n[DEBUG] Sample phonemes from mapping dict:")
+    for i, mapper in enumerate(phoneme_binary_mappers[:2]):
+        print(f"Group {i} keys:", list(mapper.keys())[:10])
 
     # === Compute Metrics ===
     TA, TR, FA, FR = compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, args.decouple_diphthongs)
