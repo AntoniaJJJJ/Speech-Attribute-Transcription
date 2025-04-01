@@ -6,47 +6,34 @@ from datasets import DatasetDict, load_dataset
 
 def find_insertions(data):
     """
-    Finds entries where the pronounced phoneme sequence is longer than the canonical phoneme sequence,
-    which could indicate insertion errors.
-
+    Identifies potential insertion annotations within the dataset, including cases
+    where canonical-phone is empty.
+    
     Args:
-        data: A list of dataset entries. Each entry should be a dictionary with keys such as
-              "phones" for the canonical phoneme sequence and "mispronunciations" for the
-              pronounced phoneme annotations.
-
+        data (list): A list of dataset entries. Each entry is expected to be a dictionary
+                     with a 'words' key, which is a list of word-level annotations.
+    
     Returns:
-        A list of entries where insertions might exist, along with the identified extra phonemes.
+        List of dictionaries containing the sample and details of the identified insertion.
     """
-    insertion_entries = []
+    insertion_candidates = []
 
     for sample in data:
         for word in sample.get("words", []):
-            canonical_phones = word.get("phones", [])
             mispronunciations = word.get("mispronunciations", [])
-
-            # Build the pronounced phoneme sequence
-            pronounced_phones = list(canonical_phones)  # Start with canonical
+            
+            # Check each mispronunciation entry
             for misp in mispronunciations:
-                idx = misp["index"]
-                if idx < len(pronounced_phones):
-                    # Replace the phoneme at the indicated index
-                    pronounced_phones[idx] = misp["pronounced-phone"].lower()
-                else:
-                    # If index is out of bounds, append (potential insertion)
-                    pronounced_phones.append(misp["pronounced-phone"].lower())
+                # Consider it an insertion if canonical-phone is missing, empty, or just a space
+                canonical_phone = misp.get("canonical-phone", "").strip()
+                if not canonical_phone:
+                    insertion_candidates.append({
+                        "sample_text": sample.get("text", ""),
+                        "pronounced_phone": misp.get("pronounced-phone", ""),
+                        "word_level_data": word
+                    })
 
-            # Check if the pronounced sequence is longer than the canonical sequence
-            if len(pronounced_phones) > len(canonical_phones):
-                # Identify the extra phonemes
-                extra_phones = pronounced_phones[len(canonical_phones):]
-                insertion_entries.append({
-                    "sample": sample,
-                    "canonical": canonical_phones,
-                    "pronounced": pronounced_phones,
-                    "inserted_phones": extra_phones
-                })
-
-    return insertion_entries
+    return insertion_candidates
 
 
 # Load the dataset
@@ -59,8 +46,7 @@ ds_filtered = ds.filter(lambda x: x["age"] <= 11)
 insertions = find_insertions(ds_filtered)
 
 # Print results
-for entry in insertions:
-    print("Insertion found:")
-    print(f"  Canonical Phones: {entry['canonical']}")
-    print(f"  Pronounced Phones: {entry['pronounced']}")
-    print(f"  Inserted Phones: {entry['inserted_phones']}")
+for ins in insertions:
+    print("Insertion Candidate Found:")
+    print(f"  Sample Text: {ins['sample_text']}")
+    print(f"  Pronounced Phone (Potential Insertion): {ins['pronounced_phone']}")
