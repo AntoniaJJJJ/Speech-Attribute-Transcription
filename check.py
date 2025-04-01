@@ -1,52 +1,62 @@
-import torch
-import re
-import pandas as pd
-from datasets import DatasetDict, load_dataset
+from datasets import load_dataset
 
-
-def find_insertions(data):
-    """
-    Identifies potential insertion annotations within the dataset, including cases
-    where canonical-phone is empty.
-    
-    Args:
-        data (list): A list of dataset entries. Each entry is expected to be a dictionary
-                     with a 'words' key, which is a list of word-level annotations.
-    
-    Returns:
-        List of dictionaries containing the sample and details of the identified insertion.
-    """
-    insertion_candidates = []
-
-    for sample in data:
-        for word in sample.get("words", []):
-            mispronunciations = word.get("mispronunciations", [])
-            
-            # Check each mispronunciation entry
-            for misp in mispronunciations:
-                # Consider it an insertion if canonical-phone is missing, empty, or just a space
-                canonical_phone = misp.get("canonical-phone", "").strip()
-                if not canonical_phone:
-                    insertion_candidates.append({
-                        "sample_text": sample.get("text", ""),
-                        "pronounced_phone": misp.get("pronounced-phone", ""),
-                        "word_level_data": word
-                    })
-
-    return insertion_candidates
-
-
-# Load the dataset
+# Load dataset and filter young speakers
 ds = load_dataset("mispeech/speechocean762")
-
-# Filter only speakers aged 11 and below
 ds_filtered = ds.filter(lambda x: x["age"] <= 11)
 
-# Find insertion cases
-insertions = find_insertions(ds_filtered)
+potential_insertions = []
 
-# Print results
-for ins in insertions:
-    print("Insertion Candidate Found:")
-    print(f"  Sample Text: {ins['sample_text']}")
-    print(f"  Pronounced Phone (Potential Insertion): {ins['pronounced_phone']}")
+def check_for_insertions(example):
+    for word in example["words"]:
+        canonical = word.get("phones", [])
+        misps = word.get("mispronunciations", [])
+
+        for misp in misps:
+            idx = misp.get("index")
+            pronounced = misp.get("pronounced-phone", "").strip().lower()
+            canonical_phone = misp.get("canonical-phone", "").strip().lower()
+
+            # Case A: Missing or invalid index
+            if idx is None or idx >= len(canonical):
+                potential_insertions.append({
+                    "text": example["text"],
+                    "canonical_phones": canonical,
+                    "index": idx,
+                    "pronounced_phone": pronounced,
+                    "canonical_phone": canonical_phone,
+                    "note": "Index missing or out of bounds – possible insertion"
+                })
+                continue
+
+            # Case B: Canonical phone is blank or missing
+            if canonical_phone == "" or canonical_phone == " ":
+                potential_insertions.append({
+                    "text": example["text"],
+                    "canonical_phones": canonical,
+                    "index": idx,
+                    "pronounced_phone": pronounced,
+                    "canonical_phone": canonical_phone,
+                    "note": "Blank or missing canonical-phone – possible insertion"
+                })
+                continue
+
+            # Case C: Pronounced phone doesn't resemble canonical or neighbors
+            nearby = canonical[max(0, idx - 1):idx + 2]
+            if pronounced not in [c.lower() for c in nearby]:
+                potential_insertions.append({
+                    "text": example["text"],
+                    "canonical_phones": canonical,
+                    "index": idx,
+                    "pronounced_phone": pronounced,
+                    "canonical_phone": canonical_phone,
+                    "note": "Pronounced phone does not match neighborhood – maybe insertion?"
+                })
+
+ds_filtered["train"].map(check_for_insertions)
+
+# Summary
+print(f"Total suspicious cases: {len(potential_insertions)}")
+for ex in potential_insertions[:5]:
+    print(f"Text: {ex['text']}")
+    print(f"Index: {ex['index']} | Canonical: '{ex['canonical_phone']}' | Pronounced: {ex['pronounced_phone']} | Note: {ex['note']}")
+    print("-" * 40)
