@@ -1,118 +1,119 @@
-import argparse
 import pandas as pd
 from datasets import load_from_disk
+from tqdm import tqdm
+import re
+from itertools import chain
 
-# === Mapping Functions ===
+# === CONFIGURATION ===
+results_db_path = "/path/to/your/results.db"
+phoneme2att_map_file = "data/Phoneme2att_camb_att_noDiph.csv"
+phonetic_alphabet = "arpa"
+attribute_list_file = 'data/list_attributes-camb.txt'
+diphthongs_to_monophthongs_map_file = "data/Diphthongs_en_us-arpa.csv"
+decouple_diphthongs = True
 
-def create_phoneme_binary_mappers(df, attribute_list, phoneme_column):
-    phoneme_binary_mappers = []
-    for att in attribute_list:
-        mapper = {}
-        for _, row in df.iterrows():
-            phoneme = str(row[phoneme_column]).lower()
-            val = row.get(att)
-            if pd.isna(val) or val not in [0, 1]:
-                continue
-            mapper[phoneme] = f'p_{att}' if val == 1 else f'n_{att}'
-        if len(mapper) == 0:
-            print(f"[WARN] Skipping empty group for attribute: {att}")
-        phoneme_binary_mappers.append(mapper)
-    return phoneme_binary_mappers
 
-def map_phonemes_to_groupwise_attrs(canonical: str, phoneme_binary_mappers: list) -> list:
-    phonemes = canonical.lower().split()
-    groupwise_attrs = []
+# === Load allowed attributes ===
+with open(attribute_list_file) as f:
+    allowed_attributes = [line.strip() for line in f if line.strip()]
 
-    for mapper in phoneme_binary_mappers:
-        group_seq = []
-        for p in phonemes:
-            if p not in mapper:
-                raise KeyError(f"{p}")
-            group_seq.append(mapper[p])
-        groupwise_attrs.append(" ".join(group_seq))
+# === LOAD MAPPING FILE ===
+df_map = pd.read_csv(phoneme2att_map_file)
+df_map = df_map.set_index(f"Phoneme_{phonetic_alphabet}")
 
-    return groupwise_attrs
+# Generate canonical attribute strings per group
+attribute_groups = [attr for attr in allowed_attributes if attr in df_map.columns]
+phoneme2attr_groupwise = {}
 
-# === Optional Diphthong Handling ===
+for ph, row in df_map.iterrows():
+    groupwise = []
+    for attr in attribute_groups:
+        val = row[attr]
+        token = f"p_{attr}" if val == 1 else f"n_{attr}"
+        groupwise.append(token)
+    phoneme2attr_groupwise[ph] = groupwise  # List of tokens (ordered by group)
 
-def load_diphthong_map():
-    with open("data/Diphthongs_en_us-arpa.csv", "r") as f:
-        lines = f.read().splitlines()
-        return {l.split(',')[0]: l.split(',')[1:] for l in lines}
+# ========= LOAD DIPH-TO-MONOPHTHONG MAPPING =========
+def load_diphthong_map(filepath):
+    with open(filepath, 'r') as f:
+        return dict([
+            (line.split(',')[0].strip(), line.strip().split(',')[1:])
+            for line in f if line.strip()
+        ])
 
-def decouple_diphthongs(phoneme_seq, diph_map):
-    tokens = phoneme_seq.split()
-    return " ".join(token if token not in diph_map else " ".join(diph_map[token]) for token in tokens)
+diph_map = {}
+if decouple_diphthongs:
+    diph_map = load_diphthong_map(diphthongs_to_monophthongs_map_file)
 
-# === Metric Computation ===
+# === INITIALIZE METRICS ===
+TA = FR = FA = TR = CD = DE = 0
 
-def compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, should_decouple):
-    TA, TR, FA, FR = 0, 0, 0, 0
+# === LOAD DATA ===
+dataset = load_from_disk(results_db_path)
+if isinstance(dataset, dict):  # if DatasetDict
+    dataset = dataset["test"]
 
-    for sample in dataset:
-        canonical = sample["phoneme_speechocean"]
-        actual_attrs = sample["target_text"]
-        predicted_attrs = sample["pred_str"]
+# === EVALUATION ===
+for example in tqdm(dataset):
+    canonical = example["phoneme_speechocean"].split()
+    spoken = example["actual_spoken_phonemes"].split()
+    labels = example["labels"]
+    pred_str = example["pred_str"]  # List of group strings
+    target_text = example["target_text"]
 
-        if should_decouple:
-            canonical = decouple_diphthongs(canonical, diphthong_map)
+    # Transpose pred/target from group-major to phoneme-major
+    pred_by_phoneme = list(zip(*[group.split() for group in pred_str]))
+    spoken_attr_by_phoneme = list(zip(*[group.split() for group in target_text]))
 
-        try:
-            canon_attrs = map_phonemes_to_groupwise_attrs(canonical, phoneme_binary_mappers)
-        except KeyError as e:
-            print(f"Missing phoneme mapping for: {e}")
-            continue
+    # Decouple + map canonical to attributes
+    canonical_attr_by_phoneme = []
+    for ph in canonical:
+        if decouple_diphthongs and ph in diph_map:
+            for sub_ph in diph_map[ph]:
+                if sub_ph in phoneme2attr_groupwise:
+                    canonical_attr_by_phoneme.append(phoneme2attr_groupwise[sub_ph])
+        else:
+            if ph in phoneme2attr_groupwise:
+                canonical_attr_by_phoneme.append(phoneme2attr_groupwise[ph])
 
-        if not (len(canon_attrs) == len(actual_attrs) == len(predicted_attrs)):
-            print("Skipping sample due to attribute length mismatch")
-            continue
+    # Flatten canonical_attr
+    canonical_attr_tokens = list(chain.from_iterable(canonical_attr_by_phoneme))
 
-        for can, act, pred in zip(canon_attrs, actual_attrs, predicted_attrs):
-            if act == can and pred == act:
-                TA += 1
-            elif act != can and pred == act:
-                TR += 1
-            elif act == can and pred != act:
-                FR += 1
-            elif act != can and pred != act and pred == can:
-                FA += 1
+    for i in range(min(len(labels), len(pred_by_phoneme), len(spoken_attr_by_phoneme), len(canonical_attr_tokens))):
+            label = labels[i]
+            pred_attr = list(pred_by_phoneme[i])
+            spoken_attr = list(spoken_attr_by_phoneme[i])
+            canonical_attr = canonical_attr_tokens[i]
 
-    return TA, TR, FA, FR
+            if label == 1:
+                if pred_attr == canonical_attr:
+                    TA += 1
+                else:
+                    FR += 1
+            else:  # mispronounced
+                if pred_attr == canonical_attr:
+                    FA += 1
+                else:
+                    TR += 1
+                    if pred_attr == spoken_attr:
+                        CD += 1
+                    else:
+                        DE += 1
 
-# === Main Script ===
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Mispronunciation Detection Metrics")
-    parser.add_argument("--data_path", type=str, required=True, help="Path to evaluated .db dataset")
-    parser.add_argument("--output_path", type=str, required=True, help="Output Excel file path")
-    parser.add_argument("--phoneme2att_path", type=str, required=True, help="Path to phoneme2att CSV")
-    parser.add_argument("--attribute_list_path", type=str, required=True, help="Path to attribute list file")
-    parser.add_argument("--decouple_diphthongs", type=lambda x: x.lower() == "true", default=False,
-                        help="Whether to decouple diphthongs")
+# === REPORT ===
+FAR = FA / (FA + TR) if (FA + TR) > 0 else 0
+FRR = FR / (FR + TA) if (FR + TA) > 0 else 0
+DER = DE / (CD + DE) if (CD + DE) > 0 else 0
 
-    args = parser.parse_args()
-
-    phoneme_column = "Phoneme_arpa"
-    ds = load_from_disk(args.data_path)
-    dataset = ds["test"] if "test" in ds else ds
-
-    # Load attribute list from file
-    with open(args.attribute_list_path) as f:
-        attribute_list = [line.strip() for line in f if line.strip()]
-
-    # Load mapping chart and build mappers
-    df = pd.read_csv(args.phoneme2att_path)
-    phoneme_binary_mappers = create_phoneme_binary_mappers(df, attribute_list, phoneme_column)
-    diphthong_map = load_diphthong_map() if args.decouple_diphthongs else {}
-
-    # Compute metrics
-    TA, TR, FA, FR = compute_ta_tr_fa_fr(dataset, phoneme_binary_mappers, diphthong_map, args.decouple_diphthongs)
-
-    # Output
-    result_df = pd.DataFrame({
-        "Metric": ["True Acceptance (TA)", "True Rejection (TR)", "False Acceptance (FA)", "False Rejection (FR)"],
-        "Count": [TA, TR, FA, FR]
-    })
-
-    result_df.to_excel(args.output_path, index=False)
-    print("Results saved to:", args.output_path)
+print("===== MDD Evaluation (Phoneme-level) =====")
+print(f"TA = {TA}")
+print(f"FR = {FR}")
+print(f"FA = {FA}")
+print(f"TR = {TR}")
+print(f"  ↳ CD = {CD}")
+print(f"  ↳ DE = {DE}")
+print()
+print(f"False Acceptance Rate (FAR): {FAR:.4f}")
+print(f"False Rejection Rate (FRR): {FRR:.4f}")
+print(f"Diagnostic Error Rate (DER): {DER:.4f}")
