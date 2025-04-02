@@ -19,38 +19,60 @@ with open(attribute_list_file) as f:
 
 # === LOAD MAPPING FILE ===
 df_map = pd.read_csv(phoneme2att_map_file)
-df_map = df_map.set_index(f"Phoneme_{phonetic_alphabet}")
+phoneme_column = f"Phoneme_{phonetic_alphabet}"
+df_map = df_map.set_index(phoneme_column)
 
-# Generate canonical attribute strings per group
+# Filter allowed attributes only
 attribute_groups = [attr for attr in allowed_attributes if attr in df_map.columns]
-phoneme2attr_groupwise = {}
 
-for ph, row in df_map.iterrows():
-    groupwise = []
-    for attr in attribute_groups:
-        val = row[attr]
-        token = f"p_{attr}" if val == 1 else f"n_{attr}"
-        groupwise.append(token)
-    phoneme2attr_groupwise[ph] = groupwise  # List of tokens (ordered by group)
+# === HELPER: Create phoneme → attribute mappers for each attribute group ===
+def create_phoneme_binary_mappers(df, attribute_list):
+    phoneme_binary_mappers = []
+    for att in attribute_list:
+        mapper = {}
+        for ph, row in df.iterrows():
+            ph = str(ph).lower()
+            val = row.get(att)
+            if pd.isna(val) or val not in [0, 1]:
+                continue
+            mapper[ph] = f'p_{att}' if val == 1 else f'n_{att}'
+        if len(mapper) == 0:
+            print(f"[WARN] Empty mapper for attribute {att}")
+        phoneme_binary_mappers.append(mapper)
+    return phoneme_binary_mappers
+
+phoneme_binary_mappers = create_phoneme_binary_mappers(df_map, attribute_groups)
 
 # ========= LOAD DIPH-TO-MONOPHTHONG MAPPING =========
 def load_diphthong_map(filepath):
     with open(filepath, 'r') as f:
-        return dict([
-            (line.split(',')[0].strip(), line.strip().split(',')[1:])
-            for line in f if line.strip()
-        ])
+        return dict([line.strip().split(',', 1) for line in f if line.strip()])
 
-diph_map = {}
-if decouple_diphthongs:
-    diph_map = load_diphthong_map(diphthongs_to_monophthongs_map_file)
+def decouple_diphthongs(phoneme_seq, diph_map):
+    tokens = phoneme_seq.split()
+    return " ".join(" ".join(diph_map[t]) if t in diph_map else t for t in tokens)
+
+diph_map = load_diphthong_map(diphthongs_to_monophthongs_map_file) if decouple_diphthongs else {}
+
+# === HELPER: Map canonical phoneme sequence → groupwise attribute sequence ===
+def map_phonemes_to_groupwise_attrs(phoneme_seq, phoneme_binary_mappers):
+    phonemes = phoneme_seq.lower().split()
+    groupwise_attrs = []
+    for mapper in phoneme_binary_mappers:
+        group_seq = []
+        for p in phonemes:
+            if p not in mapper:
+                raise KeyError(f"{p}")
+            group_seq.append(mapper[p])
+        groupwise_attrs.append(group_seq)
+    return list(zip(*groupwise_attrs))  # group-major → phoneme-major
 
 # === INITIALIZE METRICS ===
 TA = FR = FA = TR = CD = DE = 0
 
 # === LOAD DATA ===
 dataset = load_from_disk(results_db_path)
-if isinstance(dataset, dict):  # if DatasetDict
+if isinstance(dataset, dict):  
     dataset = dataset["test"]
 
 # === EVALUATION ===
@@ -65,25 +87,22 @@ for example in tqdm(dataset):
     pred_by_phoneme = list(zip(*[group.split() for group in pred_str]))
     spoken_attr_by_phoneme = list(zip(*[group.split() for group in target_text]))
 
-    # Decouple + map canonical to attributes
-    canonical_attr_by_phoneme = []
-    for ph in canonical:
-        if decouple_diphthongs and ph in diph_map:
-            for sub_ph in diph_map[ph]:
-                if sub_ph in phoneme2attr_groupwise:
-                    canonical_attr_by_phoneme.append(phoneme2attr_groupwise[sub_ph])
-        else:
-            if ph in phoneme2attr_groupwise:
-                canonical_attr_by_phoneme.append(phoneme2attr_groupwise[ph])
+    # === Decouple & map canonical ===
+    canonical_seq = " ".join(canonical)
+    if decouple_diphthongs:
+        canonical_seq = decouple_diphthongs(canonical_seq, diph_map)
 
-    # Flatten canonical_attr
-    canonical_attr_tokens = list(chain.from_iterable(canonical_attr_by_phoneme))
+    try:
+        canonical_attr_by_phoneme = map_phonemes_to_groupwise_attrs(canonical_seq, phoneme_binary_mappers)
+    except KeyError as e:
+        print(f"[WARN] Skipping sample due to missing mapping for: {e}")
+        continue
 
-    for i in range(min(len(labels), len(pred_by_phoneme), len(spoken_attr_by_phoneme), len(canonical_attr_tokens))):
+    for i in range(min(len(labels), len(pred_by_phoneme), len(spoken_attr_by_phoneme), len(canonical_attr_by_phoneme))):
             label = labels[i]
             pred_attr = list(pred_by_phoneme[i])
             spoken_attr = list(spoken_attr_by_phoneme[i])
-            canonical_attr = canonical_attr_tokens[i]
+            canonical_attr = list(canonical_attr_by_phoneme[i])
 
             if label == 1:
                 if pred_attr == canonical_attr:
