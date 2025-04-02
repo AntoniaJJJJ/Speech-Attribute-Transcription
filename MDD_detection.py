@@ -17,10 +17,12 @@ def load_diphthong_map(filepath):
         lines = f.read().splitlines()
         return {l.split(',')[0]: l.split(',')[1:] for l in lines}
 
+# Replace diphthongs in a sequence with corresponding monophthongs
 def decouple_diphthongs(phoneme_seq, diph_map):
     tokens = phoneme_seq.split()
     return " ".join(token if token not in diph_map else " ".join(diph_map[token]) for token in tokens)
 
+# Create a mapper from phoneme to binary attributes for each attribute group
 def create_phoneme_binary_mappers(df, attribute_list, phoneme_column):
     phoneme_binary_mappers = []
     for att in attribute_list:
@@ -37,6 +39,7 @@ def create_phoneme_binary_mappers(df, attribute_list, phoneme_column):
         phoneme_binary_mappers.append(mapper)
     return phoneme_binary_mappers
 
+# Map a canonical phoneme sequence to a list of attribute labels (groupwise)
 def map_phonemes_to_groupwise_attrs(phoneme_seq, phoneme_binary_mappers):
     phonemes = phoneme_seq.lower().split()
     groupwise_attrs = []
@@ -53,18 +56,23 @@ def map_phonemes_to_groupwise_attrs(phoneme_seq, phoneme_binary_mappers):
 with open(attribute_list_file) as f:
     attribute_list = [line.strip() for line in f if line.strip()]
 
+# === LOAD MAPPING FILE ===
 df_map = pd.read_csv(phoneme2att_map_file)
 phoneme_column = f"Phoneme_{phonetic_alphabet}"
 phoneme_binary_mappers = create_phoneme_binary_mappers(df_map, attribute_list, phoneme_column)
 
+# === LOAD DIPH-TO-MONOPHTHONG MAPPING ===
 diphthong_map = load_diphthong_map(diphthongs_to_monophthongs_map_file) if decouple_diphthongs else {}
 
+# === LOAD DATA ===
 dataset = load_from_disk(results_db_path)
 if isinstance(dataset, dict):
     dataset = dataset["test"]
 
+# === INITIALIZE METRICS ===
 TA = FR = FA = TR = CD = DE = 0
 
+# === EVALUATION ===
 for example in tqdm(dataset):
     canonical = example["phoneme_speechocean"].split()
     spoken_attr_by_phoneme = list(zip(*[g.split() for g in example["target_text"]]))
