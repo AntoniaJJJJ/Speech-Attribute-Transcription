@@ -5,7 +5,7 @@ import re
 from itertools import chain
 
 # === CONFIGURATION ===
-results_db_path = "/path/to/your/results.db"
+results_db_path = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_4/results_speechocean_test.db"
 phoneme2att_map_file = "data/Phoneme2att_camb_att_noDiph.csv"
 phonetic_alphabet = "arpa"
 attribute_list_file = 'data/list_attributes-camb.txt'
