@@ -71,6 +71,17 @@ if isinstance(dataset, dict):
 
 # === INITIALIZE METRICS ===
 TA = FR = FA = TR = CD = DE = 0
+TA_attr = {}
+FR_attr = {}
+FA_attr = {}
+TR_attr = {}
+
+# Create full attribute token list
+attribute_tokens = [f'p_{att}' for att in attribute_list] + [f'n_{att}' for att in attribute_list]
+TA_attr = {att: 0 for att in attribute_tokens}
+FR_attr = {att: 0 for att in attribute_tokens}
+FA_attr = {att: 0 for att in attribute_tokens}
+TR_attr = {att: 0 for att in attribute_tokens}
 
 # === EVALUATION ===
 for example in tqdm(dataset):
@@ -110,6 +121,19 @@ for example in tqdm(dataset):
                 else:
                     DE += 1
 
+        # Per-attribute counting
+        for attr_pred, attr_canon in zip(pred_attr, canonical_attr):
+            if label == 1:
+                if attr_pred == attr_canon:
+                    TA_attr[attr_canon] += 1
+                else:
+                    FR_attr[attr_canon] += 1
+            else:
+                if attr_pred == attr_canon:
+                    FA_attr[attr_canon] += 1
+                else:
+                    TR_attr[attr_canon] += 1
+
 FAR = FA / (FA + TR) if (FA + TR) > 0 else 0
 FRR = FR / (FR + TA) if (FR + TA) > 0 else 0
 DER = DE / (CD + DE) if (CD + DE) > 0 else 0
@@ -125,3 +149,9 @@ print()
 print(f"False Acceptance Rate (FAR): {FAR:.4f}")
 print(f"False Rejection Rate (FRR): {FRR:.4f}")
 print(f"Diagnostic Error Rate (DER): {DER:.4f}")
+
+# === PER-ATTRIBUTE REPORT ===
+print("\n===== Per-Attribute Counts =====")
+print("Attribute\tTA\tFR\tFA\tTR")
+for att in attribute_tokens:
+    print(f"{att}\t{TA_attr[att]}\t{FR_attr[att]}\t{FA_attr[att]}\t{TR_attr[att]}")
