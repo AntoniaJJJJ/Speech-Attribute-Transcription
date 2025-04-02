@@ -95,8 +95,8 @@ for example in tqdm(dataset):
     try:
         canonical_attr_by_phoneme = map_phonemes_to_groupwise_attrs(canonical_seq, phoneme_binary_mappers)
     except KeyError as e:
-        print(f"[WARN] Skipping sample due to missing mapping for: {e}")
-        continue
+        print(f"[WARN] Skipping sample due to missing mapping for: {e} | Canonical: {canonical_seq}")
+    continue
 
     for i in range(min(len(labels), len(pred_by_phoneme), len(spoken_attr_by_phoneme), len(canonical_attr_by_phoneme))):
             label = labels[i]
