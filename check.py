@@ -2,7 +2,7 @@ from datasets import load_from_disk
 import numpy as np
 
 # Path to your preprocessed Hugging Face dataset
-dataset_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean/"
+dataset_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean_training/"
 
 # Load the preprocessed dataset
 dataset = load_from_disk(dataset_path)
