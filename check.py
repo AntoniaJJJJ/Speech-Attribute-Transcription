@@ -1,54 +1,38 @@
-from datasets import load_dataset
+from datasets import load_from_disk
+import numpy as np
 
-# Load dataset and filter for age
-ds = load_dataset("mispeech/speechocean762")
-ds_filtered = ds.filter(lambda x: x["age"] <= 11)
+# Path to your preprocessed Hugging Face dataset
+dataset_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean/"
 
-# Store insertion candidates
-insertion_candidates = []
+# Load the preprocessed dataset
+dataset = load_from_disk(dataset_path)
 
-def find_insertions(example):
-    for word in example["words"]:
-        canonical = word.get("phones", [])
-        misps = word.get("mispronunciations", [])
+# Function to calculate statistics for a given split (train/test)
+def calculate_statistics(split):
+    total_segments = 0
+    total_speakers = set()  # Use a set to store unique speakers
+    total_duration = 0  # in seconds
 
-        for misp in misps:
-            idx = misp.get("index")
-            pronounced = misp.get("pronounced-phone", "").strip().lower()
-            canonical_phone = misp.get("canonical-phone", "").strip().lower() if "canonical-phone" in misp else None
+    # Iterate over the dataset and extract statistics
+    for sample in dataset[split]:
+        total_segments += 1
+        
+        # Add speaker metadata to the set of unique speakers
+        total_speakers.add(sample['speaker'])  # Use 'speaker' to track unique speakers
 
-            # Case 1: Index out of bounds — no canonical phoneme exists
-            if idx is None or idx >= len(canonical):
-                insertion_candidates.append({
-                    "text": example["text"],
-                    "index": idx,
-                    "pronounced_phone": pronounced,
-                    "canonical_phone": canonical_phone,
-                    "canonical_phones": canonical,
-                    "note": "Index out of bounds – likely insertion"
-                })
-                continue
+        # Assuming 'audio' contains the audio waveform and 'sampling_rate'
+        audio_length_in_seconds = len(sample['audio']['array']) / sample['audio']['sampling_rate']
+        total_duration += audio_length_in_seconds
 
-            # Case 2: Canonical-phone field is blank or missing
-            if canonical_phone in ["", " "] or canonical_phone is None:
-                insertion_candidates.append({
-                    "text": example["text"],
-                    "index": idx,
-                    "pronounced_phone": pronounced,
-                    "canonical_phone": canonical_phone,
-                    "canonical_phones": canonical,
-                    "note": "Missing or blank canonical-phone – likely insertion"
-                })
-                continue
+    # Convert duration from seconds to hours
+    total_duration_in_hours = total_duration / 3600
+    
+    return total_duration_in_hours, len(total_speakers), total_segments
 
-            # ✅ Otherwise: it's likely a substitution or distortion — ignore
+# Calculate statistics for both train and test splits
+train_duration, train_speakers, train_segments = calculate_statistics('train')
+test_duration, test_speakers, test_segments = calculate_statistics('test')
 
-ds_filtered["train"].map(find_insertions)
-
-# Print summary of suspected insertions
-print(f"Total suspected insertions: {len(insertion_candidates)}\n")
-for ex in insertion_candidates[:5]:
-    print(f"Text: {ex['text']}")
-    print(f"Index: {ex['index']} | Canonical: '{ex['canonical_phone']}' | Pronounced: '{ex['pronounced_phone']}'")
-    print(f"Note: {ex['note']}")
-    print("-" * 50)
+# Print the statistics
+print(f"Train Set - Duration: {train_duration:.2f} hours, Speakers: {train_speakers}, Segments: {train_segments}")
+print(f"Test Set - Duration: {test_duration:.2f} hours, Speakers: {test_speakers}, Segments: {test_segments}")
