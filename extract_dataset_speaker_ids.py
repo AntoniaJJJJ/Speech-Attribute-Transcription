@@ -7,8 +7,10 @@ def extract_speaker_ids_to_excel(dataset_paths, output_excel="speaker_ids.xlsx")
     writer = pd.ExcelWriter(output_excel, engine="xlsxwriter")
 
     for i, path in enumerate(dataset_paths):
+        tag = f"dataset{i+1}"
+
         if not os.path.exists(path):
-            print(f"Warning: Path '{path}' does not exist. Skipping.")
+            print(f"Path '{path}' does not exist. Skipping.")
             continue
 
         try:
@@ -17,19 +19,28 @@ def extract_speaker_ids_to_excel(dataset_paths, output_excel="speaker_ids.xlsx")
             print(f"Error loading dataset at {path}: {e}")
             continue
 
-        tag = f"dataset{i+1}"
-        for split in ["train", "test"]:
-            if split in dataset_dict:
-                speaker_ids = sorted(set(dataset_dict[split]["speaker_id"]))
-                df = pd.DataFrame(speaker_ids, columns=["speaker_id"])
-                sheet_name = f"{tag}_{split}"
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-                print(f"{sheet_name}: {len(speaker_ids)} unique speaker IDs")
-            else:
-                print(f"{tag}_{split}: Split not found")
+        print(f"Processing {tag} from: {path}")
+        print(f"Splits found: {list(dataset_dict.keys())}")
+
+        for split in dataset_dict.keys():
+            dataset = dataset_dict[split]
+
+            if "speaker_id" not in dataset.column_names:
+                print(f"'{split}' split in {tag} does not contain 'speaker_id'. Skipping.")
+                continue
+
+            speaker_ids = sorted(set(dataset["speaker_id"]))
+            if not speaker_ids:
+                print(f"No speaker IDs found in {tag}_{split}. Skipping.")
+                continue
+
+            df = pd.DataFrame(speaker_ids, columns=["speaker_id"])
+            sheet_name = f"{tag}_{split}"[:31]  # Excel sheet name max length = 31
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+            print(f"{sheet_name}: {len(speaker_ids)} unique speaker IDs written.")
 
     writer.close()
-    print(f"\nExcel file '{output_excel}' created successfully.")
+    print(f"Excel file '{output_excel}' created.")
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
