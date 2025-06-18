@@ -18,13 +18,13 @@ akt = akt.cast_column('age', Value('string'))
 
 # Merge by split
 train = concatenate_datasets([cu['train'], akt['train']])
-validation = concatenate_datasets([cu['validation'], akt['test']])
+validation = concatenate_datasets([cu['valid'], akt['test']])
 test = concatenate_datasets([cu['test'], akt['test']])
 
 # Save merged dataset
 combined = DatasetDict({
     'train': train,
-    'validation': validation,
+    'valid': validation,
     'test': test,
 })
 combined.save_to_disk('/srv/scratch/z5369417/outputs/phonemization_combined_CU_AKT_merged')
