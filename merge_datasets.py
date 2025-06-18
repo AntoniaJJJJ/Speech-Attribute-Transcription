@@ -18,7 +18,7 @@ akt = akt.cast_column('age', Value('string'))
 
 # Merge by split
 train = concatenate_datasets([cu['train'], akt['train']])
-validation = concatenate_datasets([cu['validation'], akt['validation']])
+validation = concatenate_datasets([cu['validation'], akt['test']])
 test = concatenate_datasets([cu['test'], akt['test']])
 
 # Save merged dataset
