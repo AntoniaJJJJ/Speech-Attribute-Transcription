@@ -13,6 +13,9 @@ akt = akt.rename_column('phoneme_akt', 'phoneme_combined')
 cu = cu.cast_column('speaker_id', Value('string'))
 akt = akt.cast_column('speaker_id', Value('string'))
 
+cu = cu.cast_column('age', Value('string'))
+akt = akt.cast_column('age', Value('string'))
+
 # Merge by split
 train = concatenate_datasets([cu['train'], akt['train']])
 validation = concatenate_datasets([cu['validation'], akt['validation']])
