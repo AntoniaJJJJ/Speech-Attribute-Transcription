@@ -1,8 +1,8 @@
 from datasets import load_from_disk, concatenate_datasets, DatasetDict
 
 # Load original datasets
-cu = load_from_disk('/path/to/CU_dataset')
-akt = load_from_disk('/path/to/AKT_dataset')
+cu = load_from_disk('/srv/scratch/z5369417/outputs/phonemization2_remove/cu_remove_adult_noise')
+akt = load_from_disk('/srv/scratch/z5369417/outputs/phonemization_AKT')
 
 # Rename phoneme column to be consistent across both
 cu = cu.rename_column('phoneme_cu', 'phoneme_combined')
