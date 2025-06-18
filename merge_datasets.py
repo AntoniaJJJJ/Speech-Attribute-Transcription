@@ -5,7 +5,7 @@ cu = load_from_disk('/srv/scratch/z5369417/outputs/phonemization2_remove/cu_remo
 akt = load_from_disk('/srv/scratch/z5369417/outputs/phonemization_AKT')
 
 # Rename phoneme column to be consistent across both
-cu = cu.rename_column('phoneme_cu', 'phoneme_combined')
+cu = cu.rename_column('phoneme_cmu', 'phoneme_combined')
 akt = akt.rename_column('phoneme_akt', 'phoneme_combined')
 
 # Merge by split
