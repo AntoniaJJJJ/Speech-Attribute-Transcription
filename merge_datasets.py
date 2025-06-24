@@ -1,12 +1,23 @@
 from datasets import load_from_disk, concatenate_datasets, DatasetDict, Value
 import datasets
+import pandas as pd
 
 # Load original datasets
 cu = load_from_disk('/srv/scratch/z5369417/outputs/phonemization2_remove/cu_remove_adult_noise')
 akt = load_from_disk('/srv/scratch/z5369417/outputs/phonemization_AKT')
 
+# === Load CU ARPA → IPA mapping ===
+cu_mapping = pd.read_csv('data/Phoneme2att_camb_att_Diph_v1.csv')
+arpa_to_ipa = dict(zip(cu_mapping["Phoneme_arpa"], cu_mapping["Phoneme_ipa"]))
+
+# === Function to convert ARPA string to IPA string ===
+def convert_arpa_to_ipa(phoneme_str):
+    return " ".join(arpa_to_ipa.get(p, p) for p in phoneme_str.split())
+
+# === Apply conversion to CU ===
+cu = cu.map(lambda x: {"phoneme_combined": convert_arpa_to_ipa(x["phoneme_cmu"])})
+
 # Rename phoneme column to be consistent across both
-cu = cu.rename_column('phoneme_cmu', 'phoneme_combined')
 akt = akt.rename_column('phoneme_akt', 'phoneme_combined')
 
 # Harmonize data types
