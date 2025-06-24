@@ -52,4 +52,4 @@ evaluation:
 
 
 output:
-        working_dir: '/srv/scratch/z5369417/outputs/trained_result/AKT/exp20'
+        working_dir: '/srv/scratch/z5369417/outputs/trained_result/exp20'
