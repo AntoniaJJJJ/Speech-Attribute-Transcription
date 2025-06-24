@@ -5,8 +5,8 @@ from collections import defaultdict
 akt = load_from_disk('/srv/scratch/z5369417/outputs/phonemization_AKT')
 
 # Define exclusion list
-excluded_ids = {'170', '264', '413', '440', '608', '786', '958', '982',
-                '1226', '1327', '1429', '1001', '1075', '466', '516', '899'}
+excluded_ids = {170, 264, 413, 440, 608, 786, 958, 982,
+                1226, 1327, 1429, 1001, 1075, 466, 516, 899}
 
 # Gather all speaker_ids in train split
 speaker_ids_in_train = set(x['speaker_id'] for x in akt['train'])
