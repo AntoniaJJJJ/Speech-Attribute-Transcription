@@ -24,7 +24,7 @@ preprocessor:
     diphthongs_to_monophthongs_map_file: 'data/Diphthongs_en_us-arpa.csv'
 
 training:
-    model_path: 'facebook/wav2vec2-large-robust'
+    model_path: '/home/561/aj4531/.cache/wav2vec2-large-robust'
     gradient_checkpointing: true
     ctc_loss_reduction: 'mean'
     freeze_feature_encoder: true
