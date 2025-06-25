@@ -1,4 +1,4 @@
-Phoneme_IPA,language,anterior,back,consonantal,continuant,coronal,diphthong,distributed,high,labial,lateral,long,low,monophthong,nasal,round,short,sonorant,voiced
+Phoneme_combined,language,anterior,back,consonantal,continuant,coronal,diphthong,distributed,high,labial,lateral,long,low,monophthong,nasal,round,short,sonorant,voiced
 iː,en_au,0,0,0,0,0,0,0,1,0,0,1,0,1,0,0,0,0,0
 ɪ,"en_au, en_us",0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,1,1,1
 e,en_au,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0
