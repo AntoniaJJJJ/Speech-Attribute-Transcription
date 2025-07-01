@@ -2,9 +2,9 @@ import pandas as pd
 from datasets import load_from_disk, DatasetDict
 
 # 1) Paths
-mapping_csv  = "/srv/scratch/z5369417/.../Phoneme2att_camb_att_Diph_v1.csv"
-dataset_path = "/srv/scratch/z5369417/.../phonemization_speechocean_exp11_4"
-output_path  = "/srv/scratch/z5369417/.../phonemization_speechocean_exp11_4_ipa"
+mapping_csv  = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_Diph_v1.csv"
+dataset_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4"
+output_path  = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4_ipa"
 
 # 2) Load Arpabet→IPA mapping
 mapping_df = pd.read_csv(mapping_csv)
