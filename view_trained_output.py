@@ -1,34 +1,39 @@
 import os
+import sys
 from datasets import load_from_disk
 
-# Define the path to the dataset folders
-result_db_path = '/srv/scratch/z5369417/outputs/trained_result/AKT/exp16/results_test.db' 
-#valid_data_path = os.path.join(result_db_path, 'valid')
-test_data_path = os.path.join(result_db_path, 'test')
+def main(input_dataset_path, write_to_file, output_file_path=None):
+    try:
+        dataset = load_from_disk(input_dataset_path)
 
-# Load the datasets
-try:
-    #valid_dataset = load_from_disk(valid_data_path)
-    test_dataset = load_from_disk(test_data_path)
-    
-    # Define the output text files
-    #valid_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp9/results_test_valid.db/valid_after_training.txt' 
-    test_output_file_path = '/srv/scratch/z5369417/outputs/trained_result/cu/exp9/results_test_valid.db/test_after_training.txt' 
+        if write_to_file.lower() == 'true':
+            if output_file_path is None:
+                raise ValueError("Output file path must be provided when write_to_file is True.")
 
-    # Write the 'valid' dataset to a text file
-    #with open(valid_output_file_path, 'w') as valid_file:
-    #    valid_file.write("VALID DATASET:\n")
-    #    for idx, example in enumerate(valid_dataset):
-    #        valid_file.write(f"Example {idx}:\n{example}\n\n")
-    
-    # Write the 'test' dataset to a text file
-    with open(test_output_file_path, 'w') as test_file:
-        test_file.write("TEST DATASET:\n")
-        for idx, example in enumerate(test_dataset):
-            test_file.write(f"Example {idx}:\n{example}\n\n")
+            with open(output_file_path, 'w') as out_file:
+                out_file.write("FULL DATASET:\n")
+                for idx, example in enumerate(dataset):
+                    out_file.write(f"Example {idx}:\n{example}\n\n")
 
-    #print(f"Data successfully written to {valid_output_file_path} and {test_output_file_path}")
-    print(f"Data successfully written to {test_output_file_path}")
+            print(f"Data successfully written to {output_file_path}")
 
-except Exception as e:
-    print(f"An error occurred while loading the datasets: {e}")
+        else:
+            print("Displaying the first 20 rows of the dataset:\n")
+            for idx, example in enumerate(dataset):
+                print(f"Example {idx}:\n{example}\n")
+                if idx == 19:
+                    break
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print("Usage: python script.py <input_dataset_path> <write_to_file: True|False> [output_file_path]")
+        sys.exit(1)
+
+    input_dataset_path = sys.argv[1]
+    write_to_file = sys.argv[2]
+    output_file_path = sys.argv[3] if len(sys.argv) > 3 else None
+
+    main(input_dataset_path, write_to_file, output_file_path)
