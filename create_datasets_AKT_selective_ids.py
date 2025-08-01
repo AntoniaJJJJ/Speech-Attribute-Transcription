@@ -83,7 +83,7 @@ def process_to_flat_dataset(data_dir, demographic_csv, output_path, selected_ids
             print(f"Missing files for ID {sid}")
 
     if datasets:
-        combined = datasets[0].concatenate(*datasets[1:]) if len(datasets) > 1 else datasets[0]
+        combined = concatenate_datasets(datasets) if len(datasets) > 1 else datasets[0]
         combined.save_to_disk(output_path)
         print(f"Flat dataset saved to: {output_path}")
     else:
