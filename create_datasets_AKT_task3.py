@@ -145,5 +145,5 @@ if __name__ == "__main__":
     data_directory = "/srv/scratch/z5369417/AKT_data_task3"
     demographic_csv = "/srv/scratch/z5369417/AKT_data_processing/AKT_demographic.csv"
     annotation_file = "/srv/scratch/z5369417/AKT_data_processing/AKT_id2diagnosis.xlsx"
-    output_directory = "/srv/scratch/z5369417/created_AKT_dataset_task3"
+    output_directory = "/srv/scratch/z5369417/created_dataset_AKT_task3"
     create_dataset_dict_AKT_task3(data_directory, demographic_csv, annotation_file, output_directory)
