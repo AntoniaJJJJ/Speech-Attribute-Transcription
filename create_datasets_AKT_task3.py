@@ -40,11 +40,15 @@ def load_demographic_data(demographic_csv):
 # === Read word-level annotation CSV ===
 def read_csv(csv_path):
     df = pd.read_csv(csv_path)
+
+    # Drop rows where start_hu or end_hu is NaN
+    df = df.dropna(subset=["start_hu", "end_hu", "transcription_hu"])
+
     return [
         {
-            "start_time": row["start_hu"],
-            "end_time": row["end_hu"],
-            "word": row["transcription_hu"]
+            "start_time": float(row["start_hu"]),
+            "end_time": float(row["end_hu"]),
+            "word": str(row["transcription_hu"])
         }
         for _, row in df.iterrows()
     ]
