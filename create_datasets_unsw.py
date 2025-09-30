@@ -78,11 +78,7 @@ data = []
 # === Load each row into dict with audio data ===  
 for _, row in df.iterrows():
     data.append({
-        "audio": {
-            "path": row["wav_path"],
-            "array": np.array([], dtype=np.float32),   # Will be filled by HF Audio()
-            "sampling_rate": 16000  # placeholder, handled by cast_column
-        },
+        "audio": row["wav_path"],
         "text": row["phoneme_unsw"],  #  Canonical transcription
         "phoneme_unsw": row["phoneme_unsw"],
         "actual_spoken_phonemes": row["actual_spoken_phonemes"],
