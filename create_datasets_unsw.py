@@ -19,20 +19,16 @@ The dataset includes:
     • `wavs/disordered/`     → used as the **test** split
 
 This script:
-- Loads the spreadsheet
-- Matches `.wav` files to their metadata entries
-- Reads and attaches audio arrays using Hugging Face's `Audio` feature
-- Adds all metadata columns to each example
-- Splits the dataset into train/test depending on file folder
-- Returns and saves a Hugging Face `DatasetDict` in the standard format 
+- Loads the spreadsheet and matches `.wav` files to their metadata entries.
+- Reads and attaches audio arrays using Hugging Face's `Audio` feature.
+- Adds all metadata columns to each example.
+- Combines all samples (both non-disordered and disordered) into a **single split** for easier downstream processing.
+- Saves the dataset as a Hugging Face `DatasetDict` with a single `"test"` split, ensuring compatibility with evaluation and transcription pipelines.
 
 Output format:
 DatasetDict({
-    "train": Dataset({
-        features: ["audio", "text", "phoneme_unsw", "actual_spoken_phonemes", "aligned_phonemes", "word", "age", "gender", "speech_status"],
-        ...
-    }),
     "test": Dataset({
+        features: ["audio", "text", "phoneme_unsw", "actual_spoken_phonemes", "aligned_phonemes", "word", "age", "gender", "speech_status"],
         ...
     })
 })
@@ -47,7 +43,7 @@ import numpy as np
 base_dir = "/srv/scratch/z5369417/UNSW_final_deliverables/CAAP_2023-04-27"
 wav_dir = os.path.join(base_dir, "wavs")
 spreadsheet_path = os.path.join(base_dir, "dataset_spreadsheet.xlsx")
-output_dir = "/srv/scratch/z5369417/outputs/phonemization_unsw"
+output_dir = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped"  # <- wrapped as DatasetDict
 
 # === Load the spreadsheet ===
 df = pd.read_excel(spreadsheet_path)
@@ -65,9 +61,6 @@ df["wav_path"] = df["audio_file"].apply(lambda f:
 # Filter rows with missing audio files
 df = df[df["wav_path"].apply(os.path.exists)].reset_index(drop=True)
 
-# Determine split
-df["split"] = df["wav_path"].apply(lambda p: "train" if "non_disordered" in p else "test")
-
 # Rename columns to match previous data preprocessing
 df.rename(columns={
     "word_phonemes": "phoneme_unsw",                      # Canonical
@@ -80,18 +73,17 @@ df.rename(columns={
 }, inplace=True)
 
 # Store results
-train_data = []
-test_data = []
+data = []
 
-# === Load each row into dict with audio data ===
+# === Load each row into dict with audio data ===  
 for _, row in df.iterrows():
-    data_point = {
+    data.append({
         "audio": {
             "path": row["wav_path"],
-            "array": np.array([], dtype=np.float32),  # Will be filled by HF Audio()
+            "array": np.array([], dtype=np.float32),   # Will be filled by HF Audio()
             "sampling_rate": 16000  # placeholder, handled by cast_column
         },
-        "text": row["phoneme_unsw"],  # Canonical transcription
+        "text": row["phoneme_unsw"],  #  Canonical transcription
         "phoneme_unsw": row["phoneme_unsw"],
         "actual_spoken_phonemes": row["actual_spoken_phonemes"],
         "aligned_phonemes": row["aligned_phonemes"],
@@ -99,26 +91,16 @@ for _, row in df.iterrows():
         "age": row["age"],
         "gender": row["gender"],
         "speech_status": row["speech_status"]
-    }
-    
-    if row["split"] == "train":
-        train_data.append(data_point)
-    else:
-        test_data.append(data_point)
+    })
 
 # === Convert to HuggingFace Datasets ===
-train_dataset = Dataset.from_list(train_data)
-test_dataset = Dataset.from_list(test_data)
+dataset = Dataset.from_list(data)
 
 # Cast audio column
-train_dataset = train_dataset.cast_column("audio", Audio())
-test_dataset = test_dataset.cast_column("audio", Audio())
+dataset = dataset.cast_column("audio", Audio())
 
-# Combine into DatasetDict
-dataset_dict = DatasetDict({
-    "train": train_dataset,
-    "test": test_dataset
-})
+# Wrap in DatasetDict with 'test' split
+dataset_dict = DatasetDict({"test": dataset})
 
 # Save to disk
 os.makedirs(output_dir, exist_ok=True)
