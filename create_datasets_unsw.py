@@ -93,7 +93,7 @@ for _, row in df.iterrows():
 dataset = Dataset.from_list(data)
 
 # Cast audio column
-dataset = dataset.cast_column("audio", Audio())
+dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 
 # Wrap in DatasetDict with 'test' split
 dataset_dict = DatasetDict({"test": dataset})
