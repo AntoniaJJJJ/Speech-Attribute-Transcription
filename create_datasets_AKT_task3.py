@@ -40,7 +40,14 @@ def load_demographic_data(demographic_csv):
 # === Read word-level annotation CSV ===
 def read_csv(csv_path):
     df = pd.read_csv(csv_path)
-    return [{"start_time": row['tmin'], "end_time": row['tmax'], "word": row['text']} for _, row in df.iterrows()]
+    return [
+        {
+            "start_time": row["start_hu"],
+            "end_time": row["end_hu"],
+            "word": row["transcription_hu"]
+        }
+        for _, row in df.iterrows()
+    ]
 
 # === Split audio into segments ===
 def split_audio(wav_path, segments):
