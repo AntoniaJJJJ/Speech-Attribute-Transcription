@@ -72,7 +72,7 @@ print(f"Saved sample-level AERs → {sample_out}")
 
 # === 7. Group by demographics ===
 print("Grouping by gender  speech_status  age_year ...")
-value_cols = [c for c in sample_df.columns if c.startswith("AER_group")]
+value_cols = [c for c in sample_df.columns if c.startswith("AER_")]
 group_summary = (
     sample_df.groupby(["gender", "speech_status", "age_year"])[value_cols]
     .mean()
