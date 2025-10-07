@@ -28,7 +28,6 @@ def load_phoneme_mapping(file_path):
 def extract_words_with_counts(dataset):
     word_counter = Counter()
     for split_name, split_data in dataset.items():
-        print(f"🔹 Scanning split: {split_name} ({len(split_data)} rows)")
         for text in split_data['text']:
             words = re.sub(r"[^\w\s']", '', str(text).lower()).split()
             word_counter.update(words)
