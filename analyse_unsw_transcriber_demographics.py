@@ -95,11 +95,11 @@ df_csv = os.path.join(output_dir, "full_data_flat.csv")
 df.to_csv(df_csv, index=False)
 summary.to_csv(summary_csv, index=False)
 
-print(f"\n✅ Analysis complete.")
+print(f"\nAnalysis complete.")
 print(f"  → Full flattened dataset saved to: {df_csv}")
 print(f"  → Demographic summary saved to: {summary_csv}")
 
-# === OPTIONAL VISUALIZATION ===
+
 try:
     import seaborn as sns
     import matplotlib.pyplot as plt
