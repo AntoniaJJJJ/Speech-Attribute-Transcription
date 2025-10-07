@@ -54,7 +54,7 @@ df["age_year"] = (df["age"].astype(float) / 12).round(0).astype(int)
 # === 5. Compute grouped WER statistics ===
 print("Grouping by demographics ...")
 group_stats = (
-    df.groupby(["gender", "speech_status", "age_group"])
+    df.groupby(["gender", "speech_status", "age_year"])
       .agg(mean_WER=("WER","mean"),
            std_WER=("WER","std"),
            count=("WER","count"))
@@ -90,7 +90,7 @@ else:
     print(" Confusion matrix file not found:", confusion_matrix_file)
 
 # === 7. Save sample-level WERs ===
-df_out = df[["word","phoneme_unsw","pred_phoneme","age","age_group","gender","speech_status","WER"]]
+df_out = df[["word","phoneme_unsw","pred_phoneme","age","age_year","gender","speech_status","WER"]]
 df_out.to_csv(os.path.join(output_dir, "sample_WER_detail.csv"), index=False)
 
 print("\n Analysis complete.")
