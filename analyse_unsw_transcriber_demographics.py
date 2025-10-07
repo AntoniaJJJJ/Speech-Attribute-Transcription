@@ -48,9 +48,9 @@ df["WER"] = df.apply(
 # === 4. Define age groups (months) ===
 def age_group(m):
     if m < 60: return "Below 5y"
-    elif m < 84: return "5–7y"
-    elif m < 120: return "7–10y"
-    elif m < 156: return "10–13y"
+    elif m < 84: return "5-7y"
+    elif m < 120: return "7-10y"
+    elif m < 156: return "10-13y"
     else: return "13y+"
 df["age_group"] = df["age"].astype(float).apply(age_group)
 
