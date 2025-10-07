@@ -12,6 +12,7 @@ import evaluate
 
 # === USER PATHS ===
 results_path = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db"
+attribute_list_path = "data/list_attributes-camb.txt"
 output_dir = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/analysis_AER_demographics_unsw"
 os.makedirs(output_dir, exist_ok=True)
 
@@ -37,7 +38,12 @@ df["age_year"] = (df["age"].astype(float) / 12).round(0).astype(int)
 # === 4. Load same AER metric used in train.py ===
 metric = evaluate.load("wer")
 
-# === 5. Compute per-sample AER ===
+# === 5. Load attribute names ===
+with open(attribute_list_path, "r") as f:
+    attributes = [line.strip() for line in f.readlines() if line.strip()]
+n_attr = len(attributes)
+
+# === 6. Compute per-sample AER ===
 print("Computing AER per sample ...")
 records = []
 for _, row in df.iterrows():
@@ -53,8 +59,10 @@ for _, row in df.iterrows():
 
     # Ensure both are lists of equal length (each attr group)
     if isinstance(preds, list) and isinstance(refs, list):
-        for i in range(len(preds)):
-            rec[f"AER_group{i}"] = metric.compute(predictions=[preds[i]], references=[refs[i]])
+        # Match each AER to attribute name
+        for i, att in enumerate(attributes[:len(preds)]):
+            rec[f"AER_{att}"] = metric.compute(predictions=[preds[i]], references=[refs[i]])
+
     records.append(rec)
 
 sample_df = pd.DataFrame(records)
@@ -62,7 +70,7 @@ sample_out = os.path.join(output_dir, "sample_AER_detail.csv")
 sample_df.to_csv(sample_out, index=False)
 print(f"Saved sample-level AERs → {sample_out}")
 
-# === 6. Group by demographics ===
+# === 7. Group by demographics ===
 print("Grouping by gender  speech_status  age_year ...")
 value_cols = [c for c in sample_df.columns if c.startswith("AER_group")]
 group_summary = (
