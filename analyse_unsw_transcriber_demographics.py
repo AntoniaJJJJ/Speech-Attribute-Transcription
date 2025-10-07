@@ -4,18 +4,24 @@ Analyse UNSW transcriber results by demographic groups
 This script:
 1. Loads transcriber dataset (phoneme_unsw + pred_phoneme + demographics)
 2. Computes per-sample WER using the same metric as transcriber.py
-3. Groups WER by gender, speech_status (SSD vs non-SSD), and age group (in months)
+3. Groups WER by gender, speech_status (SSD vs non-SSD), and integer age (in years)
 4. Reads the saved confusion-matrix CSV and aggregates confusion counts
-5. Saves:
+5. Computes confusion matrices per demographic (age, gender, SSD)
+6. Saves:
    - sample-level WERs → sample_WER_detail.csv
    - grouped WER stats → grouped_WER_summary.csv
-   - demographic-weighted confusion matrices → confusion_summary_by_group.csv
+   - global confusion summaries → confusion_summary_by_group_raw.csv / normalized.csv
+   - per-demographic confusion counts → confusion_by_demographic.csv
+
 """
+
 
 import os
 import pandas as pd
 import evaluate
 import re
+from collections import Counter
+from datasets import load_from_disk
 
 # === USER PATHS ===
 dataset_path = "/srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_unsw"
@@ -24,7 +30,6 @@ output_dir = "/srv/scratch/z5369417/outputs/transcriber_result/analysis_cu_model
 os.makedirs(output_dir, exist_ok=True)
 
 # === 1. Load dataset ===
-print("Loading transcriber dataset ...")
 data = []
 from datasets import load_from_disk
 dataset = load_from_disk(dataset_path)
@@ -89,6 +94,52 @@ if os.path.exists(confusion_matrix_file):
 else:
     print(" Confusion matrix file not found:", confusion_matrix_file)
 
+# === 6b. Compute confusion matrices per demographic ===
+print("Computing confusion matrices per demographic group ...")
+
+def get_confusion_pairs(ref_seq, pred_seq):
+    """Return aligned (Reference, Predicted) pairs from two space-separated phoneme sequences."""
+    ref_list = ref_seq.split()
+    pred_list = pred_seq.split()
+    # Truncate to shortest length to avoid index errors if CTC output is shorter
+    length = min(len(ref_list), len(pred_list))
+    return list(zip(ref_list[:length], pred_list[:length]))
+
+demographic_groups = df.groupby(["gender", "speech_status", "age_year"])
+group_confusion_results = []
+
+for (gender, status, age), group_df in demographic_groups:
+    confusion_counter = Counter()
+    for _, row in group_df.iterrows():
+        pairs = get_confusion_pairs(row["phoneme_unsw"], row["pred_phoneme"])
+        confusion_counter.update(pairs)
+
+    if not confusion_counter:
+        continue
+
+    cm_df_demo = pd.DataFrame(list(confusion_counter.items()), columns=["pair", "count"])
+    cm_df_demo[["Reference", "Predicted"]] = pd.DataFrame(cm_df_demo["pair"].tolist(), index=cm_df_demo.index)
+    cm_df_demo = cm_df_demo.drop(columns=["pair"])
+    cm_df_demo["gender"] = gender
+    cm_df_demo["speech_status"] = status
+    cm_df_demo["age_year"] = age
+
+    group_confusion_results.append(cm_df_demo)
+
+if group_confusion_results:
+    confusion_by_demo = pd.concat(group_confusion_results, ignore_index=True)
+
+    # Add relative confusion ratio (normalized within each Reference phoneme)
+    confusion_by_demo["ratio"] = (
+        confusion_by_demo["count"] /
+        confusion_by_demo.groupby(["gender", "speech_status", "age_year", "Reference"])["count"].transform("sum")
+    )
+
+    confusion_by_demo.to_csv(os.path.join(output_dir, "confusion_by_demographic.csv"), index=False)
+    print(f"→ Saved per-demographic confusion matrix: {os.path.join(output_dir, 'confusion_by_demographic.csv')}")
+else:
+    print(" No confusion data found for demographic breakdown.")
+
 # === 7. Save sample-level WERs ===
 df_out = df[["word","phoneme_unsw","pred_phoneme","age","age_year","gender","speech_status","WER"]]
 df_out.to_csv(os.path.join(output_dir, "sample_WER_detail.csv"), index=False)
@@ -97,3 +148,4 @@ print("\n Analysis complete.")
 print(f"→ Sample-level WERs: {os.path.join(output_dir,'sample_WER_detail.csv')}")
 print(f"→ Grouped summary:   {os.path.join(output_dir,'grouped_WER_summary.csv')}")
 print(f"→ Confusion summaries (raw & normalized): {output_dir}")
+print(f"→ Confusion by demographics: {os.path.join(output_dir, 'confusion_by_demographic.csv')}")
