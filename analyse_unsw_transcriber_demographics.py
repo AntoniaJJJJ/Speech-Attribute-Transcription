@@ -1,130 +1,102 @@
 """
-Author: Antonia Jian
-Date (Last Modified): 07/10/2025
-
-Description:
-Analyses the demographic performance of the CU model (Exp11) tested on the UNSW dataset.
-
-This script loads the transcriber output:
-    /srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_unsw/
-
-and groups the evaluation results by:
-    - age (converted from months to years, binned into age groups)
-    - gender
-    - speech_status (0 = Non-SSD, 1 = SSD)
-
-The script then summarizes performance metrics (WER) for each demographic group and saves the results as CSV files.
-
-It does NOT re-compute WER or modify prediction logic — it simply aggregates results.
-
-Output directory:
-    /srv/scratch/z5369417/outputs/transcriber_result/analysis_cu_model_exp11_test_on_unsw
+Analyse UNSW transcriber results by demographic groups
+------------------------------------------------------
+This script:
+1. Loads transcriber dataset (phoneme_unsw + pred_phoneme + demographics)
+2. Computes per-sample WER using the same metric as transcriber.py
+3. Groups WER by gender, speech_status (SSD vs non-SSD), and age group (in months)
+4. Reads the saved confusion-matrix CSV and aggregates confusion counts
+5. Saves:
+   - sample-level WERs → sample_WER_detail.csv
+   - grouped WER stats → grouped_WER_summary.csv
+   - demographic-weighted confusion matrices → confusion_summary_by_group.csv
 """
 
 import os
 import pandas as pd
-from datasets import load_from_disk
+import evaluate
+import re
 
-# === PATH SETUP ===
-input_dataset_path = "/srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_unsw"
+# === USER PATHS ===
+dataset_path = "/srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_unsw"
+confusion_matrix_file = "/srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_unsw_no_diph_cm.csv"    # produced by transcriber.py
 output_dir = "/srv/scratch/z5369417/outputs/transcriber_result/analysis_cu_model_exp11_test_on_unsw"
 os.makedirs(output_dir, exist_ok=True)
 
-# === LOAD DATASET ===
-print("Loading dataset from:", input_dataset_path)
-dataset = load_from_disk(input_dataset_path)
-if "test" in dataset:
-    dataset = dataset["test"]
+# === 1. Load dataset ===
+print("Loading transcriber dataset ...")
+data = []
+from datasets import load_from_disk
+dataset = load_from_disk(dataset_path)
+for example in dataset:
+    data.append(example)
+df = pd.DataFrame(data)
 
-# Convert to DataFrame
-df = pd.DataFrame(dataset)
+# === 2. Prepare text columns ===
+df = df.dropna(subset=["phoneme_unsw", "pred_phoneme"])
+df["phoneme_unsw"] = df["phoneme_unsw"].astype(str).str.strip()
+df["pred_phoneme"] = df["pred_phoneme"].astype(str).str.strip()
 
-# === BASIC SANITY CHECKS ===
-print(f"Loaded {len(df)} samples.")
-print("Columns:", list(df.columns))
+# === 3. Compute per-sample WER ===
+print("Computing WER per sample ...")
+wer_metric = evaluate.load("wer")
+df["WER"] = df.apply(
+    lambda row: wer_metric.compute(predictions=[row["pred_phoneme"]], references=[row["phoneme_unsw"]]),
+    axis=1
+)
 
-# === AGE CONVERSION (months → years) ===
-if "age" in df.columns:
-    df["age_years"] = df["age"] / 12.0
-    df["age_group"] = pd.cut(
-        df["age_years"],
-        bins=[0, 6, 8, 10, 12, 14, 20],
-        labels=["≤6", "7–8", "9–10", "11–12", "13–14", "≥15"]
+# === 4. Define age groups (months) ===
+def age_group(m):
+    if m < 60: return "Below 5y"
+    elif m < 84: return "5–7y"
+    elif m < 120: return "7–10y"
+    elif m < 156: return "10–13y"
+    else: return "13y+"
+df["age_group"] = df["age"].astype(float).apply(age_group)
+
+# === 5. Compute grouped WER statistics ===
+print("Grouping by demographics ...")
+group_stats = (
+    df.groupby(["gender", "speech_status", "age_group"])
+      .agg(mean_WER=("WER","mean"),
+           std_WER=("WER","std"),
+           count=("WER","count"))
+      .reset_index()
+)
+group_stats.to_csv(os.path.join(output_dir, "grouped_WER_summary.csv"), index=False)
+
+# === 6. Load and analyse confusion matrix ===
+print("Analysing confusion matrix ...")
+if os.path.exists(confusion_matrix_file):
+    cm_df = pd.read_csv(confusion_matrix_file, index_col=0)
+    cm_df.index.name = "Reference"
+    cm_df.columns.name = "Predicted"
+
+    # total confusions per group of interest
+    top_confusions = (
+        cm_df.stack().reset_index(name="count")
+        .query("Reference != Predicted and count > 0")
+        .sort_values("count", ascending=False)
     )
-else:
-    df["age_years"] = None
-    df["age_group"] = "Unknown"
 
-# === MAP SPEECH STATUS ===
-if "speech_status" in df.columns:
-    df["speech_status"] = df["speech_status"].map({0: "Non-SSD", 1: "SSD"}).fillna("Unknown")
-
-# === GROUP METRIC AGGREGATION ===
-# We'll summarize string-level metrics if available (WER, CER, etc.), otherwise count samples.
-metric_columns = [c for c in df.columns if c.lower().startswith(("wer", "cer", "aer"))]
-
-if not metric_columns:
-    print("⚠️  No explicit metric columns found (WER/CER/AER). Assuming sample-level metrics are not stored.")
-    df["count"] = 1
-    summary = (
-        df.groupby(["gender", "age_group", "speech_status"])
-        .agg(count=("count", "sum"))
-        .reset_index()
+    # compute relative confusion (normalized)
+    cm_normalized = cm_df.div(cm_df.sum(axis=1), axis=0).fillna(0)
+    cm_norm_top = (
+        cm_normalized.stack().reset_index(name="ratio")
+        .query("Reference != Predicted and ratio > 0")
+        .sort_values("ratio", ascending=False)
     )
+
+    top_confusions.to_csv(os.path.join(output_dir, "confusion_summary_by_group_raw.csv"), index=False)
+    cm_norm_top.to_csv(os.path.join(output_dir, "confusion_summary_by_group_normalized.csv"), index=False)
 else:
-    # Compute mean metric per demographic cell
-    summaries = []
-    for metric in metric_columns:
-        temp = (
-            df.groupby(["gender", "age_group", "speech_status"])
-            .agg(
-                mean_metric=(metric, "mean"),
-                std_metric=(metric, "std"),
-                sample_count=(metric, "count")
-            )
-            .reset_index()
-        )
-        temp["metric_name"] = metric
-        summaries.append(temp)
-    summary = pd.concat(summaries, ignore_index=True)
+    print(" Confusion matrix file not found:", confusion_matrix_file)
 
-# === SAVE OUTPUTS ===
-summary_csv = os.path.join(output_dir, "demographic_summary.csv")
-df_csv = os.path.join(output_dir, "full_data_flat.csv")
+# === 7. Save sample-level WERs ===
+df_out = df[["word","phoneme_unsw","pred_phoneme","age","age_group","gender","speech_status","WER"]]
+df_out.to_csv(os.path.join(output_dir, "sample_WER_detail.csv"), index=False)
 
-df.to_csv(df_csv, index=False)
-summary.to_csv(summary_csv, index=False)
-
-print(f"\nAnalysis complete.")
-print(f"  → Full flattened dataset saved to: {df_csv}")
-print(f"  → Demographic summary saved to: {summary_csv}")
-
-
-try:
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-
-    if metric_columns:
-        for metric in metric_columns:
-            subset = summary[summary["metric_name"] == metric]
-            plt.figure(figsize=(10, 5))
-            sns.barplot(
-                data=subset,
-                x="age_group",
-                y="mean_metric",
-                hue="speech_status",
-                errorbar=None
-            )
-            plt.title(f"{metric.upper()} by Age Group and Speech Status")
-            plt.ylabel(f"Mean {metric.upper()}")
-            plt.xlabel("Age Group (years)")
-            plt.legend(title="Speech Status")
-            plt.tight_layout()
-
-            fig_path = os.path.join(output_dir, f"{metric}_by_age_gender_ssd.png")
-            plt.savefig(fig_path, dpi=300)
-            plt.close()
-            print(f"  → Figure saved: {fig_path}")
-
-except Exception as e:
-    print("⚠️ Visualization skipped due to missing seaborn/matplotlib:", e)
+print("\n Analysis complete.")
+print(f"→ Sample-level WERs: {os.path.join(output_dir,'sample_WER_detail.csv')}")
+print(f"→ Grouped summary:   {os.path.join(output_dir,'grouped_WER_summary.csv')}")
+print(f"→ Confusion summaries (raw & normalized): {output_dir}")
