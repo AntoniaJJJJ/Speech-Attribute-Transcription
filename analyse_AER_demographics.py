@@ -17,6 +17,11 @@ os.makedirs(output_dir, exist_ok=True)
 
 # === 1. Load dataset ===
 dataset = load_from_disk(results_path)
+
+# Handle DatasetDict (with 'test' split)
+if isinstance(dataset, dict) or "test" in dataset:
+    dataset = dataset["test"]
+
 df = pd.DataFrame(dataset)
 print(f"Loaded {len(df)} samples with columns: {list(df.columns)}")
 
@@ -37,14 +42,14 @@ print("Computing AER per sample ...")
 records = []
 for _, row in df.iterrows():
     rec = {
-        "speaker_id": row.get("speaker_id", None),
-        "gender": row["gender"],
-        "speech_status": row["speech_status"],
-        "age_year": row["age_year"]
+    "word": row.get("word", None),
+    "gender": row["gender"],
+    "speech_status": row["speech_status"],
+    "age_year": row["age_year"]
     }
 
-    preds = row["pred_str"]
-    refs = row["target_text"]
+    preds = row.get("pred_str", None)
+    refs = row.get("target_text", None)
 
     # Ensure both are lists of equal length (each attr group)
     if isinstance(preds, list) and isinstance(refs, list):
