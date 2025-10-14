@@ -1,48 +1,41 @@
-import os
 import pandas as pd
-from datasets import load_from_disk
+from datasets import load_from_disk, DatasetDict
 
-# Paths
-MAP_FILE = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_Diph_v1.csv"
-INPUT_DATASET = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped/"
-OUTPUT_DATASET = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped_ipa/"
+# 1) Paths
+mapping_csv  = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_Diph_v1.csv"
+dataset_path = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4"
+output_path  = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4_ipa"
 
-# Column to replace
-PHONEME_COLUMN = "phoneme_unsw"
+# 2) Load Arpabet→IPA mapping
+mapping_df = pd.read_csv(mapping_csv)
+arpa2ipa   = mapping_df.set_index("Phoneme_arpa")["Phoneme_ipa"].to_dict()
 
-def load_arpa_to_ipa_map(map_file):
-    """Load the ARPA→IPA conversion map from the CSV file."""
-    df = pd.read_csv(map_file)
-    df["Phoneme_arpa"] = df["Phoneme_arpa"].astype(str).str.strip().str.lower()
-    df["Phoneme_ipa"] = df["Phoneme_ipa"].astype(str).str.strip()
-    mapping = dict(zip(df["Phoneme_arpa"], df["Phoneme_ipa"]))
-    print(f"Loaded {len(mapping)} ARPA to IPA mappings.")
-    return mapping
+# 3) Load your dataset
+ds = load_from_disk(dataset_path)
 
-def convert_sequence(seq, mapping):
-    """Convert an ARPAbet phoneme sequence (string or list) into IPA."""
-    if not seq:
-        return seq
-    if isinstance(seq, list):
-        seq = " ".join(seq)
-    tokens = seq.strip().split()
-    return " ".join(mapping.get(t.lower(), t) for t in tokens)
+# 4) Fields to convert
+seq_fields = ["phoneme_speechocean", "actual_spoken_phonemes"]
+#    (add any other space‐delimited phoneme fields here)
 
-def process_dataset(input_path, output_path, mapping, column=PHONEME_COLUMN):
-    print(f"Loading dataset from: {input_path}")
-    ds = load_from_disk(input_path)
+def to_ipa(batch):
+    out = {}
+    for fld in seq_fields:
+        seqs = batch[fld]
+        ipa_seqs = [
+            " ".join(arpa2ipa.get(tok, tok) for tok in seq.split())
+            for seq in seqs
+        ]
+        out[fld] = ipa_seqs
+    return out
 
-    def convert_batch(batch):
-        batch[column] = [convert_sequence(seq, mapping) for seq in batch[column]]
-        return batch
-
+# 5) Apply mapping with a safe batch size
+B = 500
+if isinstance(ds, DatasetDict):
     for split in ds:
-        print(f"Processing split: {split}")
-        ds[split] = ds[split].map(convert_batch, batched=True, desc=f"Converting {column} ARPA→IPA")
+        ds[split] = ds[split].map(to_ipa, batched=True, batch_size=B)
+else:
+    ds = ds.map(to_ipa, batched=True, batch_size=B)
 
-    print(f"Saving IPA-replaced dataset to: {output_path}")
-    ds.save_to_disk(output_path)
-
-if __name__ == "__main__":
-    mapping = load_arpa_to_ipa_map(MAP_FILE)
-    process_dataset(INPUT_DATASET, OUTPUT_DATASET, mapping)
+# 6) Save the IPA‐riched dataset
+ds.save_to_disk(output_path)
+print("Converted dataset saved to:", output_path)
