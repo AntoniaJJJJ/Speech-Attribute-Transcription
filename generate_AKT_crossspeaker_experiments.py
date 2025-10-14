@@ -53,6 +53,8 @@ rotating_groups = [remaining_nonssd[i*ROTATING_NONSSD_N:(i+1)*ROTATING_NONSSD_N]
 
 # === 3. Generate experiments ===
 records = []
+from datasets import concatenate_datasets
+
 for i in range(N_EXPERIMENTS):
     exp_name = f"AKT_exp{i+1}"
     exp_dir = os.path.join(SAVE_ROOT, exp_name)
@@ -63,16 +65,13 @@ for i in range(N_EXPERIMENTS):
     test_ids = ssd_ids + fixed_nonssd + rotating_groups[i]
     train_ids = [id for id in nonssd_ids if id not in test_ids]
 
-    # Filter data
-    train_split = train_df[train_df["speaker_id"].isin(train_ids)]
-    test_split = pd.concat([
-        train_df[train_df["speaker_id"].isin(fixed_nonssd + rotating_groups[i])],
-        test_df
-    ])
-    ds_train = dataset["train"].select(train_split.index.tolist())
-    ds_test = dataset["train"].select(train_df[train_df["speaker_id"].isin(fixed_nonssd + rotating_groups[i])].index.tolist())
-    ds_test = ds_test.concatenate(dataset["test"])  # add SSD part
+    # Filter datasets
+    ds_train = dataset["train"].filter(lambda x: x["speaker_id"] in train_ids)
+    ds_test_nonssd = dataset["train"].filter(lambda x: x["speaker_id"] in (fixed_nonssd + rotating_groups[i]))
+    ds_test_ssd = dataset["test"]  # 10 SSD speakers
+    ds_test = concatenate_datasets([ds_test_nonssd, ds_test_ssd])
 
+    # Save DatasetDict
     exp_dataset = DatasetDict({"train": ds_train, "test": ds_test})
     exp_dataset.save_to_disk(dataset_dir)
 
