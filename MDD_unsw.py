@@ -361,7 +361,13 @@ def main():
         f.write("===== Edit Operations (Phoneme-level) =====\n")
         f.write(f"Substitutions = {total_S}\nDeletions = {total_D}\nInsertions = {total_I}\n\n")
         f.write("===== Model Detection vs Edit Operations =====\n")
-        f.write(f"Overall Precision={op_perf_overall_prec:.3f}, Recall={op_perf_overall_rec:.3f}, F1={op_perf_overall_f1:.3f}\n")
+        f.write(f"Overall Precision={op_perf_overall_prec:.3f}, Recall={op_perf_overall_rec:.3f}, F1={op_perf_overall_f1:.3f}\n\n")
+
+        for r in per_op_rows:
+            f.write(f"{r['op']}:\n")
+            f.write(f"  Precision = {r['Precision']:.4f}\n")
+            f.write(f"  Recall    = {r['Recall']:.4f}\n")
+            f.write(f"  F1        = {r['F1']:.4f}\n\n")
 
     # 2) Per-attribute counts
     per_att = []
@@ -384,6 +390,7 @@ def main():
     )
     
     # 5) Edit op performance (per operation)
+    per_op_rows = [r for r in per_op_rows if r['op'] in ['M', 'S']]
     pd.DataFrame(per_op_rows).to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"), index=False)
 
     print("MDD done.")
