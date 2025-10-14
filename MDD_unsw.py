@@ -22,19 +22,19 @@ from collections import Counter
 from datasets import load_from_disk
 
 # ============ CONFIG ============
-RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db"
+RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp22/exp22_2/results_unsw_test.db"
 
-# Use the SAME attribute list & p2att mapping the CU model used
-ATTRIBUTE_LIST_FILE = "data/list_attributes-camb.txt"                 # one attribute per line
-P2ATT_CSV           = "data/Phoneme2att_camb_att_noDiph.csv"         # has a phoneme column + binary attribute columns
-P2ATT_PHONEME_COL   = "Phoneme_arpa"                                 # column name in the CSV for phoneme symbols
+# Use the SAME attribute list & p2att mapping the model used
+ATTRIBUTE_LIST_FILE = "data/list_attributes_combined_us_au_Diph.txt"                 # one attribute per line
+P2ATT_CSV           = "data/Phoneme2att_combined_us_au_att_Diph_voiced1vowels.csv"         # has a phoneme column + binary attribute columns
+P2ATT_PHONEME_COL   = "Phoneme_combined"                                 # column name in the CSV for phoneme symbols
 
 # Diphthong handling (match exp11 training)
-DECOUPLE_DIPH = True
+DECOUPLE_DIPH = False
 DIPH2MONO_FILE = "data/Diphthongs_en_us-arpa.csv"                    # "ai,a i" style rows
 
 # Output dir
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_exp11_5"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_exp22_2"
 os.makedirs(OUT_DIR, exist_ok=True)
 # =================================
 
