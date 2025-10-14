@@ -268,11 +268,20 @@ def main():
                 # edit-op detection stats
                 pred_correct = model_accepts
                 true_correct = (op=="M")
-                if  true_correct and  pred_correct: op_perf["TP"]+=1; op_stats[op]["TP"]+=1
-                elif true_correct and not pred_correct: op_perf["FN"]+=1; op_stats[op]["FN"]+=1
-                elif not true_correct and  pred_correct: op_perf["FP"]+=1; op_stats[op]["FP"]+=1
-                elif not true_correct and not pred_correct: op_perf["TN"]+=1; op_stats[op]["TN"]+=1
-
+                # Only evaluate detection for M and S (skip D and I, since model has no predictions there)
+                if op in ("M", "S"):
+                    if  true_correct and  pred_correct:
+                        op_perf["TP"] += 1
+                        op_stats[op]["TP"] += 1
+                    elif true_correct and not pred_correct:
+                        op_perf["FN"] += 1
+                        op_stats[op]["FN"] += 1
+                    elif not true_correct and  pred_correct:
+                        op_perf["FP"] += 1
+                        op_stats[op]["FP"] += 1
+                    elif not true_correct and not pred_correct:
+                        op_perf["TN"] += 1
+                        op_stats[op]["TN"] += 1
 
                 if gt_correct:
                     if model_accepts:
@@ -334,10 +343,12 @@ def main():
     op_perf_overall_rec  = op_perf["TP"]/(op_perf["TP"]+op_perf["FN"]+1e-9)
     op_perf_overall_f1   = f1(op_perf_overall_prec, op_perf_overall_rec)
     per_op_rows=[]
-    for op in ["M","S","D","I"]:
-        TP,FP,FN=op_stats[op]["TP"],op_stats[op]["FP"],op_stats[op]["FN"]
-        prec=TP/(TP+FP+1e-9); rec=TP/(TP+FN+1e-9); f1s=f1(prec,rec)
-        per_op_rows.append({"op":op,"Precision":prec,"Recall":rec,"F1":f1s})
+    for op in ["M","S"]:  # Only include M and S, since model has no predictions for D or I
+        TP, FP, FN = op_stats[op]["TP"], op_stats[op]["FP"], op_stats[op]["FN"]
+        prec = TP / (TP + FP + 1e-9)
+        rec  = TP / (TP + FN + 1e-9)
+        f1s  = f1(prec, rec)
+        per_op_rows.append({"op": op, "Precision": prec, "Recall": rec, "F1": f1s})
 
      # === Save outputs ===
     # 1) Global summary
@@ -348,11 +359,9 @@ def main():
         f.write(f"FAR = {FAR:.4f}\nFRR = {FRR:.4f}\nDER = {DER:.4f}\n")
         f.write(f"Precision = {precision:.4f}\nRecall = {recall:.4f}\nF1 = {F1:.4f}\n\n")
         f.write("===== Edit Operations (Phoneme-level) =====\n")
-        f.write(f"Substitutions = {total_S}\nDeletions = {total_D}\nInsertions = {total_I}\n")
+        f.write(f"Substitutions = {total_S}\nDeletions = {total_D}\nInsertions = {total_I}\n\n")
         f.write("===== Model Detection vs Edit Operations =====\n")
         f.write(f"Overall Precision={op_perf_overall_prec:.3f}, Recall={op_perf_overall_rec:.3f}, F1={op_perf_overall_f1:.3f}\n")
-        for r in per_op_rows:
-            f.write(f"{r['op']}: Precision={r['Precision']:.3f}, Recall={r['Recall']:.3f}, F1={r['F1']:.3f}\n")
 
     # 2) Per-attribute counts
     per_att = []
