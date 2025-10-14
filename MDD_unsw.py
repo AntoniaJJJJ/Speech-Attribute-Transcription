@@ -1,31 +1,35 @@
-# Mispronunciation Detection & Diagnosis on UNSW using CU model evaluation outputs
-# - Attribute-level MDD: TA/FR/FA/TR, CD/DE, FAR/FRR/DER/F1
-# - Phoneme-level: Substitution / Deletion / Insertion counts
-#
-# Outputs here:
-#   - mdd_summary.txt                      (global totals + rates)
-#   - mdd_per_attribute_counts.csv         (TA/FR/FA/TR per attribute token)
-#   - mdd_sample_detail.csv                (per-sample & per-position detail summary)
-#   - edit_ops_totals.csv                  (total S/D/I)
-#
-# If diphthongs are decoupled in training, set DECOUPLE_DIPH=True and provide diph map.
+"""
+Mispronunciation Detection & Diagnosis on UNSW using CU model evaluation outputs
+ - Attribute-level MDD: TA/FR/FA/TR, CD/DE, FAR/FRR/DER/F1
+ - Phoneme-level: Substitution / Deletion / Insertion counts
+ - Model detection performance with reference to edit operations (Precision, Recall, F1)
+ 
+ Outputs here:
+   - mdd_summary.txt                      (global totals + rates)
+   - mdd_per_attribute_counts.csv         (TA/FR/FA/TR per attribute token)
+   - mdd_sample_detail.csv                (per-sample & per-position detail summary)
+   - edit_ops_totals.csv                  (total S/D/I)
+   - edit_ops_performance.csv             (Precision/Recall/F1 per edit operation)
 
+If diphthongs are decoupled in training, set DECOUPLE_DIPH=True and provide diph map.
+"""
 
 import os
 import re
 import json
 import pandas as pd
+from collections import Counter
 from datasets import load_from_disk
 
 # ============ CONFIG ============
 RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db"
 
-# Use the SAME attribute list & p2att mapping your CU model used
+# Use the SAME attribute list & p2att mapping the CU model used
 ATTRIBUTE_LIST_FILE = "data/list_attributes-camb.txt"                 # one attribute per line
 P2ATT_CSV           = "data/Phoneme2att_camb_att_noDiph.csv"         # has a phoneme column + binary attribute columns
 P2ATT_PHONEME_COL   = "Phoneme_arpa"                                 # column name in the CSV for phoneme symbols
 
-# Diphthong handling (match your exp11 training)
+# Diphthong handling (match exp11 training)
 DECOUPLE_DIPH = True
 DIPH2MONO_FILE = "data/Diphthongs_en_us-arpa.csv"                    # "ai,a i" style rows
 
@@ -189,6 +193,8 @@ def main():
     TR_attr = {t: 0 for t in att_tokens}
 
     total_S = total_D = total_I = 0
+    op_perf = Counter()
+    op_stats = {"M": Counter(), "S": Counter(), "D": Counter(), "I": Counter()}
 
     # per-sample rows (summaries)
     sample_rows = []
@@ -259,6 +265,15 @@ def main():
                 gt_correct = (c_tok == s_tok)  # ground truth: correct or mispronounced at phoneme level
                 model_accepts = (pred_vec == canon_vec)
 
+                # edit-op detection stats
+                pred_correct = model_accepts
+                true_correct = (op=="M")
+                if  true_correct and  pred_correct: op_perf["TP"]+=1; op_stats[op]["TP"]+=1
+                elif true_correct and not pred_correct: op_perf["FN"]+=1; op_stats[op]["FN"]+=1
+                elif not true_correct and  pred_correct: op_perf["FP"]+=1; op_stats[op]["FP"]+=1
+                elif not true_correct and not pred_correct: op_perf["TN"]+=1; op_stats[op]["TN"]+=1
+
+
                 if gt_correct:
                     if model_accepts:
                         TA += 1
@@ -314,6 +329,16 @@ def main():
     recall    = TR / (TR + FR) if (TR + FR) > 0 else 0.0
     F1        = f1(precision, recall)
 
+    # Edit-op model performance
+    op_perf_overall_prec = op_perf["TP"]/(op_perf["TP"]+op_perf["FP"]+1e-9)
+    op_perf_overall_rec  = op_perf["TP"]/(op_perf["TP"]+op_perf["FN"]+1e-9)
+    op_perf_overall_f1   = f1(op_perf_overall_prec, op_perf_overall_rec)
+    per_op_rows=[]
+    for op in ["M","S","D","I"]:
+        TP,FP,FN=op_stats[op]["TP"],op_stats[op]["FP"],op_stats[op]["FN"]
+        prec=TP/(TP+FP+1e-9); rec=TP/(TP+FN+1e-9); f1s=f1(prec,rec)
+        per_op_rows.append({"op":op,"Precision":prec,"Recall":rec,"F1":f1s})
+
      # === Save outputs ===
     # 1) Global summary
     with open(os.path.join(OUT_DIR, "mdd_summary.txt"), "w") as f:
@@ -324,6 +349,10 @@ def main():
         f.write(f"Precision = {precision:.4f}\nRecall = {recall:.4f}\nF1 = {F1:.4f}\n\n")
         f.write("===== Edit Operations (Phoneme-level) =====\n")
         f.write(f"Substitutions = {total_S}\nDeletions = {total_D}\nInsertions = {total_I}\n")
+        f.write("===== Model Detection vs Edit Operations =====\n")
+        f.write(f"Overall Precision={op_perf_overall_prec:.3f}, Recall={op_perf_overall_rec:.3f}, F1={op_perf_overall_f1:.3f}\n")
+        for r in per_op_rows:
+            f.write(f"{r['op']}: Precision={r['Precision']:.3f}, Recall={r['Recall']:.3f}, F1={r['F1']:.3f}\n")
 
     # 2) Per-attribute counts
     per_att = []
@@ -344,6 +373,9 @@ def main():
     pd.DataFrame([{"S": total_S, "D": total_D, "I": total_I}]).to_csv(
         os.path.join(OUT_DIR, "edit_ops_totals.csv"), index=False
     )
+    
+    # 5) Edit op performance (per operation)
+    pd.DataFrame(per_op_rows).to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"), index=False)
 
     print("MDD done.")
     print(f"  - {os.path.join(OUT_DIR,'mdd_summary.txt')}")
