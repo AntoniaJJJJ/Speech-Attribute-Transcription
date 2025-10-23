@@ -31,7 +31,7 @@ from datasets import load_from_disk
 
 # ==================== CONFIG ====================
 
-RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp11/exp11_5/results_unsw_test.db"
+RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db"
 ATTRIBUTE_LIST_FILE = "data/list_attributes-camb.txt"
 P2ATT_CSV = "data/Phoneme2att_camb_att_noDiph.csv"
 P2ATT_PHONEME_COL = "Phoneme_arpa"
