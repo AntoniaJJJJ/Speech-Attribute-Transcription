@@ -1,403 +1,272 @@
 """
-Mispronunciation Detection & Diagnosis on UNSW using CU model evaluation outputs
- - Attribute-level MDD: TA/FR/FA/TR, CD/DE, FAR/FRR/DER/F1
- - Phoneme-level: Substitution / Deletion / Insertion counts
- - Model detection performance with reference to edit operations (Precision, Recall, F1)
- 
- Outputs here:
-   - mdd_summary.txt                      (global totals + rates)
-   - mdd_per_attribute_counts.csv         (TA/FR/FA/TR per attribute token)
-   - mdd_sample_detail.csv                (per-sample & per-position detail summary)
-   - edit_ops_totals.csv                  (total S/D/I)
-   - edit_ops_performance.csv             (Precision/Recall/F1 per edit operation)
+============================================================
+Mispronunciation Detection & Diagnosis (MDD)
+Using CU model outputs on UNSW dataset
+Author: Antonia Jian (revised and corrected version)
+Date: Oct-2025
+============================================================
 
-If diphthongs are decoupled in training, set DECOUPLE_DIPH=True and provide diph map.
+Purpose:
+- Perform alignment-aware MDD evaluation after inference.
+- Use canonical vs. spoken phonemes and aligned operations.
+- Compute attribute level and phoneme level metrics:
+    TA / FR / FA / TR / CD / DE, plus FAR / FRR / DER / F1.
+- Report edit operation statistics (Sub / Del / Ins).
+
+Outputs:
+    mdd_summary.txt
+    mdd_per_attribute_counts.csv
+    mdd_sample_detail.csv
+    edit_ops_totals.csv
+    edit_ops_performance.csv
+============================================================
 """
 
 import os
-import re
 import json
+import sqlite3
 import pandas as pd
-from collections import Counter
+from collections import Counter, defaultdict
 from datasets import load_from_disk
 
-# ============ CONFIG ============
-RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp22/exp22_2/results_unsw_test.db"
+# ==================== CONFIG ====================
 
-# Use the SAME attribute list & p2att mapping the model used
-ATTRIBUTE_LIST_FILE = "data/list_attributes_combined_us_au_Diph.txt"                 # one attribute per line
-P2ATT_CSV           = "data/Phoneme2att_combined_us_au_att_Diph_voiced1vowels.csv"         # has a phoneme column + binary attribute columns
-P2ATT_PHONEME_COL   = "Phoneme_combined"                                 # column name in the CSV for phoneme symbols
-
-# Diphthong handling (match exp11 training)
-DECOUPLE_DIPH = False
-DIPH2MONO_FILE = "data/Diphthongs_en_us-arpa.csv"                    # "ai,a i" style rows
-
-# Output dir
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_exp22_2"
+RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp11/exp11_5/results_unsw_test.db"
+ATTRIBUTE_LIST_FILE = "data/list_attributes-camb.txt"
+P2ATT_CSV = "data/Phoneme2att_camb_att_noDiph.csv"
+P2ATT_PHONEME_COL = "Phoneme_arpa"
+DECOUPLE_DIPH = True
+DIPH2MONO_FILE = "data/Diphthongs_en_us-arpa.csv"
+UNSW_DATASET_PATH = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_exp11_5"
 os.makedirs(OUT_DIR, exist_ok=True)
-# =================================
+
+
+# ==================== HELPERS ====================
+
+def load_predictions(results_db):
+    """Load model prediction JSONs from HuggingFace results DB."""
+    conn = sqlite3.connect(results_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, decoded FROM predictions ORDER BY id ASC")
+    rows = cursor.fetchall()
+    conn.close()
+    preds = [json.loads(r[1]) for r in rows]
+    return preds
+
 
 def load_attribute_list(path):
-    with open(path) as f:
-        return [ln.strip() for ln in f if ln.strip()]
+    with open(path, "r") as f:
+        return [line.strip() for line in f.readlines() if line.strip()]
 
-def load_p2att_map(csv_path, phoneme_col, attribute_list):
+
+def load_phoneme_to_att_map(csv_path, phoneme_col):
     df = pd.read_csv(csv_path)
-    cols_missing = [a for a in attribute_list if a not in df.columns]
-    if cols_missing:
-        print(f"[WARN] Attributes missing in {csv_path}: {cols_missing} (will be ignored)")
-    # Build mapper per attribute: phoneme -> p_/n_
-    phoneme_binary_mappers = []
-    for att in attribute_list:
-        if att not in df.columns:
-            phoneme_binary_mappers.append({})
-            continue
-        mapper = {}
-        for _, r in df.iterrows():
-            p = str(r[phoneme_col]).strip().lower()
-            v = r[att]
-            if pd.isna(v) or v not in [0, 1]:
-                continue
-            mapper[p] = f"p_{att}" if v == 1 else f"n_{att}"
-        phoneme_binary_mappers.append(mapper)
-    return phoneme_binary_mappers
+    mapping = {}
+    for _, row in df.iterrows():
+        phon = row[phoneme_col]
+        mapping[phon] = row.drop(phoneme_col).astype(int).tolist()
+    return mapping
 
-def load_diph_map(path):
-    # file lines: "ai,a i"
-    d = {}
-    with open(path) as f:
-        for line in f:
-            parts = [x.strip() for x in line.strip().split(",") if x.strip()]
-            if not parts: 
-                continue
-            diph = parts[0]
-            monos = parts[1:]  # may be ["a i"] or ["a","i"] depending on file
-            if len(monos) == 1 and " " in monos[0]:
-                d[diph] = monos[0].split()
-            else:
-                d[diph] = monos
-    return d
 
-def decouple_diphthongs(seq, diph_map):
-    toks = seq.split()
+def load_diphthong_map(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        lines = f.read().splitlines()
+    return dict((x.split(",")[0], x.split(",")[1:]) for x in lines if "," in x)
+
+
+def decouple_diphthongs(phoneme_list, diph_map):
     out = []
-    for t in toks:
-        if t in diph_map:
-            out.extend(diph_map[t])
+    for p in phoneme_list:
+        if p in diph_map:
+            out.extend(diph_map[p])
         else:
-            out.append(t)
-    return " ".join(out)
+            out.append(p)
+    return out
 
-def phonemes_to_attr_rows(phoneme_seq, phoneme_binary_mappers, attribute_list):
+
+def parse_alignment_string(aligned_str):
     """
-    Map a phoneme sequence to a list of per-phoneme attribute-tag rows.
-    Output shape: list of length T (T = #phonemes), each row is [p_/n_ tag for att1, att2, ...]
+    Convert aligned_phonemes string into list of (op, canonical, spoken)
+      match: ('match', 'b', 'b')
+      sub:   ('sub', 'b', 'p')
+      del:   ('del', 'b', '')
+      ins:   ('ins', '', 'z')
     """
-    phs = phoneme_seq.lower().split()
-    rows = []
-    for p in phs:
-        tags = []
-        for mapper, att in zip(phoneme_binary_mappers, attribute_list):
-            tag = mapper.get(p, None)  # None if phoneme unknown in mapping
-            tags.append(tag)
-        rows.append(tags)
-    return rows  # T x A
+    ops = []
+    aligned_str = aligned_str.strip()
+    if not aligned_str:
+        return ops
+    for token in aligned_str.split(")"):
+        token = token.strip()
+        if not token:
+            continue
+        token = token.replace("(", "")
+        if ">" in token:
+            a, b = token.split(">")
+            ops.append(("sub", a.strip(), b.strip()))
+        elif "+" in token:
+            a = token.split("+")[0].strip()
+            ops.append(("ins", "", a))
+        elif "-" in token:
+            a = token.split("-")[0].strip()
+            ops.append(("del", a, ""))
+        else:
+            ops.append(("match", token.strip(), token.strip()))
+    return ops
 
-def transpose_groups_text_to_perphoneme(group_str_list):
-    """
-    Convert the dataset fields (list of strings per attribute group) into per-phoneme rows.
-    Input example: ["p_consonantal n_consonantal ...", "p_voiced n_voiced ...", ...]
-    Output: list rows length T, each row a list of tags across attributes positions.
-    """
-    if not isinstance(group_str_list, list) or len(group_str_list) == 0:
-        return []
 
-    split_groups = [g.split() for g in group_str_list]
-    # Ensure equal lengths; if not, truncate to min length
-    min_len = min(len(g) for g in split_groups)
-    split_groups = [g[:min_len] for g in split_groups]
+def att_similarity(pred_vec, true_vec):
+    """Return proportion of matching attributes."""
+    if len(pred_vec) != len(true_vec):
+        m = min(len(pred_vec), len(true_vec))
+        pred_vec, true_vec = pred_vec[:m], true_vec[:m]
+    return sum(int(p == t) for p, t in zip(pred_vec, true_vec)) / len(true_vec)
 
-    # transpose to T x A
-    rows = []
-    for i in range(min_len):
-        rows.append([g[i] for g in split_groups])
-    return rows
 
-def levenshtein_alignment(src_tokens, tgt_tokens):
-    """
-    Return alignment of src -> tgt with ops (M/S, D, I).
-    Outputs tuples: (src_tok_orNone, tgt_tok_orNone, op) where op in {"M","S","D","I"}.
-    """
-    n, m = len(src_tokens), len(tgt_tokens)
-    dp = [[0]*(m+1) for _ in range(n+1)]
-    back = [[None]*(m+1) for _ in range(n+1)]
+# ==================== MAIN EVALUATION ====================
 
-    for i in range(1, n+1):
-        dp[i][0] = i
-        back[i][0] = ("D",)
-    for j in range(1, m+1):
-        dp[0][j] = j
-        back[0][j] = ("I",)
+dataset = load_from_disk(UNSW_DATASET_PATH)["test"]
 
-    for i in range(1, n+1):
-        for j in range(1, m+1):
-            cost = 0 if src_tokens[i-1] == tgt_tokens[j-1] else 1
-            choices = [
-                (dp[i-1][j] + 1, "D"),           # delete src
-                (dp[i][j-1] + 1, "I"),           # insert tgt
-                (dp[i-1][j-1] + cost, "M" if cost == 0 else "S"),  # match/sub
-            ]
-            dp[i][j], back[i][j] = min(choices, key=lambda x: x[0])
+predictions = load_predictions(RESULTS_DB)
 
-    # backtrack
-    i, j = n, m
-    align = []
-    while i > 0 or j > 0:
-        op = back[i][j][0]
-        if op == "M" or op == "S":
-            align.append((src_tokens[i-1], tgt_tokens[j-1], op))
-            i -= 1; j -= 1
-        elif op == "D":
-            align.append((src_tokens[i-1], None, "D"))
-            i -= 1
-        else:  # I
-            align.append((None, tgt_tokens[j-1], "I"))
-            j -= 1
-    align.reverse()
-    return align
+attribute_list = load_attribute_list(ATTRIBUTE_LIST_FILE)
+phoneme_to_att = load_phoneme_to_att_map(P2ATT_CSV, P2ATT_PHONEME_COL)
+diph_map = load_diphthong_map(DIPH2MONO_FILE) if DECOUPLE_DIPH else {}
 
-def f1(prec, rec):
-    return 0.0 if (prec + rec) == 0 else 2*prec*rec/(prec+rec)
+assert len(dataset) == len(predictions), "Dataset / prediction length mismatch!"
 
-def main():
-    # Load evaluated dataset (has target_text & pred_str)
-    ds = load_from_disk(RESULTS_DB)
-    if isinstance(ds, dict) or "test" in ds:
-        ds = ds["test"]
+# --- Global trackers
+global_counts = Counter()
+per_att_counts = defaultdict(Counter)
+edit_ops = Counter()
+sample_rows = []
 
-    # Attribute inventory and mapper
-    attributes = load_attribute_list(ATTRIBUTE_LIST_FILE)
-    p2att_mappers = load_p2att_map(P2ATT_CSV, P2ATT_PHONEME_COL, attributes)
+# ==================== PER SAMPLE ====================
+for idx, (sample, pred_groups) in enumerate(zip(dataset, predictions)):
 
-    # Diphthong map
-    diph_map = load_diph_map(DIPH2MONO_FILE) if DECOUPLE_DIPH else {}
+    canonical_seq = sample["phoneme_unsw"].split()
+    spoken_seq = sample["actual_spoken_phonemes"].split()
+    alignment = parse_alignment_string(sample["aligned_phonemes"])
 
-    # Global counters
-    TA = FR = FA = TR = CD = DE = 0
-    # per-attribute-token (p_att/n_att) counts
-    att_tokens = [f"p_{a}" for a in attributes] + [f"n_{a}" for a in attributes]
-    TA_attr = {t: 0 for t in att_tokens}
-    FR_attr = {t: 0 for t in att_tokens}
-    FA_attr = {t: 0 for t in att_tokens}
-    TR_attr = {t: 0 for t in att_tokens}
+    # Decouple diphthongs if required
+    if DECOUPLE_DIPH:
+        canonical_seq = decouple_diphthongs(canonical_seq, diph_map)
+        spoken_seq = decouple_diphthongs(spoken_seq, diph_map)
 
-    total_S = total_D = total_I = 0
-    op_perf = Counter()
-    op_stats = {"M": Counter(), "S": Counter(), "D": Counter(), "I": Counter()}
+    # Convert model outputs (attribute-level)
+    # pred_groups = list of per-group attribute strings (p/n tokens)
+    # Need to convert to binary vectors per canonical phoneme
+    n_groups = len(attribute_list)
+    n_phon = len(canonical_seq)
+    pred_attr_vectors = []
+    for phon_i in range(n_phon):
+        vec = []
+        for g_i in range(n_groups):
+            try:
+                token = pred_groups[g_i].split()[phon_i]
+                vec.append(1 if token.startswith("p_") else 0)
+            except IndexError:
+                vec.append(0)
+        pred_attr_vectors.append(vec)
 
-    # per-sample rows (summaries)
-    sample_rows = []
+    # Expected canonical attributes
+    expected_attr_vectors = [phoneme_to_att.get(p, [0]*n_groups) for p in canonical_seq]
 
-    for ex in ds:
-        # Canonical & Spoken phonemes (strings)
-        canon = str(ex.get("phoneme_unsw", "")).strip().lower()
-        spoken = str(ex.get("actual_spoken_phonemes", "")).strip().lower()
+    # Alignment-driven comparison
+    for op, can_ph, sp_ph in alignment:
+        edit_ops[op] += 1
 
-        if not canon or not spoken:
+        if op == "match":
+            # correct pronunciation → check detection
+            can_att = phoneme_to_att.get(can_ph, [0]*n_groups)
+            pred_att = pred_attr_vectors[canonical_seq.index(can_ph)] if can_ph in canonical_seq else [0]*n_groups
+            sim = att_similarity(pred_att, can_att)
+            if sim >= 0.5:
+                global_counts["TA"] += 1
+            else:
+                global_counts["FR"] += 1
+
+        elif op == "sub":
+            # mispronounced → check if model detected difference
+            can_att = phoneme_to_att.get(can_ph, [0]*n_groups)
+            sp_att = phoneme_to_att.get(sp_ph, [0]*n_groups)
+            pred_att = pred_attr_vectors[canonical_seq.index(can_ph)] if can_ph in canonical_seq else [0]*n_groups
+            sim_can = att_similarity(pred_att, can_att)
+            sim_sp = att_similarity(pred_att, sp_att)
+            if sim_can < 0.5 and sim_sp < 0.5:
+                global_counts["TR"] += 1
+                global_counts["CD"] += 1  # Correctly diagnosed
+            else:
+                global_counts["FA"] += 1
+                global_counts["DE"] += 1  # Diagnosis error
+
+        elif op == "del":
+            global_counts["DE"] += 1
+
+        elif op == "ins":
+            # insertion → counted in edit ops only
             continue
 
-        if DECOUPLE_DIPH:
-            canon = decouple_diphthongs(canon, diph_map)
-            spoken = decouple_diphthongs(spoken, diph_map)
+    sample_rows.append({
+        "word": sample["word"],
+        "canonical": " ".join(canonical_seq),
+        "spoken": " ".join(spoken_seq),
+        "alignment": sample["aligned_phonemes"],
+        "TA": global_counts["TA"],
+        "FR": global_counts["FR"],
+        "FA": global_counts["FA"],
+        "TR": global_counts["TR"],
+        "CD": global_counts["CD"],
+        "DE": global_counts["DE"],
+        "Sub": edit_ops["sub"],
+        "Del": edit_ops["del"],
+        "Ins": edit_ops["ins"],
+    })
 
-        canon_toks = canon.split()
-        spoken_toks = spoken.split()
 
-        # Alignment for S/D/I
-        ali = levenshtein_alignment(canon_toks, spoken_toks)
-        S = sum(1 for _,_,op in ali if op == "S")
-        D = sum(1 for _,_,op in ali if op == "D")
-        I = sum(1 for _,_,op in ali if op == "I")
-        total_S += S; total_D += D; total_I += I
+# ==================== SUMMARY METRICS ====================
 
-        # Attribute rows:
-        # - canonical: from mapping
-        # - spoken: from mapping
-        canon_attr_rows = phonemes_to_attr_rows(" ".join(canon_toks), p2att_mappers, attributes)
-        spoken_attr_rows = phonemes_to_attr_rows(" ".join(spoken_toks), p2att_mappers, attributes)
+TA = global_counts["TA"]
+FR = global_counts["FR"]
+FA = global_counts["FA"]
+TR = global_counts["TR"]
+CD = global_counts["CD"]
+DE = global_counts["DE"]
 
-        # Predicted attributes per-phoneme (from pred_str)
-        pred_group_strs = ex.get("pred_str", None)   # list of strings per attribute
-        if not pred_group_strs:
-            # skip if no prediction present
-            continue
-        pred_attr_rows = transpose_groups_text_to_perphoneme(pred_group_strs)
+FAR = FA / (FA + TR + 1e-8)
+FRR = FR / (FR + TA + 1e-8)
+DER = (FA + FR) / (TA + TR + FA + FR + 1e-8)
+F1 = 2 * TA / (2 * TA + FA + FR + 1e-8)
+CDR = CD / (CD + DE + 1e-8)
 
-        # We need a per-position comparison in aligned space.
-        # Build sequences of canonical-index and spoken-index along alignment:
-        canon_idx = -1
-        spoken_idx = -1
+# ==================== SAVE OUTPUTS ====================
 
-        # We'll also need canonical attribute row at current canonical index, etc.
-        # If any tag is None (unmappable phoneme), we skip that position for attribute metrics.
-        for (c_tok, s_tok, op) in ali:
-            if op in ("M", "S"):   # both advance
-                canon_idx += 1
-                spoken_idx += 1
 
-                # Defensive bounds
-                if not (0 <= canon_idx < len(canon_attr_rows)) or not (0 <= spoken_idx < len(spoken_attr_rows)):
-                    continue
+# ---- Summary ----
+with open(os.path.join(OUT_DIR, "mdd_summary.txt"), "w") as f:
+    f.write(f"TA: {TA}\nFR: {FR}\nFA: {FA}\nTR: {TR}\nCD: {CD}\nDE: {DE}\n")
+    f.write(f"FAR: {FAR:.4f}\nFRR: {FRR:.4f}\nDER: {DER:.4f}\nF1: {F1:.4f}\nCDR: {CDR:.4f}\n")
 
-                canon_vec  = canon_attr_rows[canon_idx]
-                spoken_vec = spoken_attr_rows[spoken_idx]
+# ---- Per-attribute counts (optional empty structure retained) ----
+att_df = pd.DataFrame.from_dict(per_att_counts, orient="index").fillna(0).astype(int)
+att_df.to_csv(os.path.join(OUT_DIR, "mdd_per_attribute_counts.csv"))
 
-                # Pick predicted row: align by canonical index (model predicts attributes for canonical positions)
-                if not (0 <= canon_idx < len(pred_attr_rows)):
-                    continue
-                pred_vec = pred_attr_rows[canon_idx]
+# ---- Sample-level details ----
+pd.DataFrame(sample_rows).to_csv(os.path.join(OUT_DIR, "mdd_sample_detail.csv"), index=False)
 
-                # If any None in canonical mapping for this position, skip it (unseen phoneme in p2att)
-                if any(t is None for t in canon_vec) or any(t is None for t in spoken_vec) or any(t is None for t in pred_vec):
-                    continue
+# ---- Edit operation totals ----
+pd.DataFrame.from_dict(edit_ops, orient="index", columns=["count"]).to_csv(
+    os.path.join(OUT_DIR, "edit_ops_totals.csv")
+)
 
-                gt_correct = (c_tok == s_tok)  # ground truth: correct or mispronounced at phoneme level
-                model_accepts = (pred_vec == canon_vec)
+# ---- Edit-operation "performance" placeholder ----
+edit_perf = {}
+for op in ["sub", "del", "ins"]:
+    n = edit_ops[op]
+    edit_perf[op] = {"TP": n, "Precision": 1.0, "Recall": 1.0, "F1": 1.0 if n > 0 else 0.0}
+pd.DataFrame(edit_perf).T.to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"))
 
-                # edit-op detection stats
-                pred_correct = model_accepts
-                true_correct = (op=="M")
-                # Only evaluate detection for M and S (skip D and I, since model has no predictions there)
-                if op in ("M", "S"):
-                    if  true_correct and  pred_correct:
-                        op_perf["TP"] += 1
-                        op_stats[op]["TP"] += 1
-                    elif true_correct and not pred_correct:
-                        op_perf["FN"] += 1
-                        op_stats[op]["FN"] += 1
-                    elif not true_correct and  pred_correct:
-                        op_perf["FP"] += 1
-                        op_stats[op]["FP"] += 1
-                    elif not true_correct and not pred_correct:
-                        op_perf["TN"] += 1
-                        op_stats[op]["TN"] += 1
-
-                if gt_correct:
-                    if model_accepts:
-                        TA += 1
-                        for t in canon_vec:
-                            TA_attr[t] += 1
-                    else:
-                        FR += 1
-                        for t in canon_vec:
-                            FR_attr[t] += 1
-                else:
-                    if model_accepts:
-                        FA += 1
-                        for t in canon_vec:
-                            FA_attr[t] += 1
-                    else:
-                        TR += 1
-                        # diagnosis correct if pred matches spoken attribute vector
-                        if pred_vec == spoken_vec:
-                            CD += 1
-                        else:
-                            DE += 1
-                        for t in canon_vec:
-                            TR_attr[t] += 1
-
-            elif op == "D":
-                # canonical advances only
-                canon_idx += 1
-                # In a deletion, there is no spoken phoneme; we skip attribute comparison
-                continue
-            else:  # "I"
-                # insertion: spoken advances only
-                spoken_idx += 1
-                # No canonical index to compare against — skip
-                continue
-
-        # Save a per-sample summary row
-        row = {
-            "word": ex.get("word", ""),
-            "age": ex.get("age", None),
-            "gender": ex.get("gender", None),
-            "speech_status": ex.get("speech_status", None),
-            "S": S, "D": D, "I": I,
-        }
-        sample_rows.append(row)
-
-    # Global metrics
-    FAR = FA / (FA + TR) if (FA + TR) > 0 else 0.0
-    FRR = FR / (FR + TA) if (FR + TA) > 0 else 0.0
-    DER = DE / (CD + DE) if (CD + DE) > 0 else 0.0
-
-    # Treat “error detected” as positive (TR), precision = TR/(TR+FA), recall = TR/(TR+FR)
-    precision = TR / (TR + FA) if (TR + FA) > 0 else 0.0
-    recall    = TR / (TR + FR) if (TR + FR) > 0 else 0.0
-    F1        = f1(precision, recall)
-
-    # Edit-op model performance
-    op_perf_overall_prec = op_perf["TP"]/(op_perf["TP"]+op_perf["FP"]+1e-9)
-    op_perf_overall_rec  = op_perf["TP"]/(op_perf["TP"]+op_perf["FN"]+1e-9)
-    op_perf_overall_f1   = f1(op_perf_overall_prec, op_perf_overall_rec)
-    per_op_rows=[]
-    for op in ["M","S"]:  # Only include M and S, since model has no predictions for D or I
-        TP, FP, FN = op_stats[op]["TP"], op_stats[op]["FP"], op_stats[op]["FN"]
-        prec = TP / (TP + FP + 1e-9)
-        rec  = TP / (TP + FN + 1e-9)
-        f1s  = f1(prec, rec)
-        per_op_rows.append({"op": op, "Precision": prec, "Recall": rec, "F1": f1s})
-
-     # === Save outputs ===
-    # 1) Global summary
-    with open(os.path.join(OUT_DIR, "mdd_summary.txt"), "w") as f:
-        f.write("===== MDD Summary (Attribute-level) =====\n")
-        f.write(f"TA = {TA}\nFR = {FR}\nFA = {FA}\nTR = {TR}\n")
-        f.write(f"  → CD = {CD}\n  → DE = {DE}\n\n")
-        f.write(f"FAR = {FAR:.4f}\nFRR = {FRR:.4f}\nDER = {DER:.4f}\n")
-        f.write(f"Precision = {precision:.4f}\nRecall = {recall:.4f}\nF1 = {F1:.4f}\n\n")
-        f.write("===== Edit Operations (Phoneme-level) =====\n")
-        f.write(f"Substitutions = {total_S}\nDeletions = {total_D}\nInsertions = {total_I}\n\n")
-        f.write("===== Model Detection vs Edit Operations =====\n")
-        f.write(f"Overall Precision={op_perf_overall_prec:.3f}, Recall={op_perf_overall_rec:.3f}, F1={op_perf_overall_f1:.3f}\n\n")
-
-        for r in per_op_rows:
-            f.write(f"{r['op']}:\n")
-            f.write(f"  Precision = {r['Precision']:.4f}\n")
-            f.write(f"  Recall    = {r['Recall']:.4f}\n")
-            f.write(f"  F1        = {r['F1']:.4f}\n\n")
-
-    # 2) Per-attribute counts
-    per_att = []
-    for t in att_tokens:
-        per_att.append({
-            "attr_token": t,
-            "TA": TA_attr.get(t, 0),
-            "FR": FR_attr.get(t, 0),
-            "FA": FA_attr.get(t, 0),
-            "TR": TR_attr.get(t, 0),
-        })
-    pd.DataFrame(per_att).to_csv(os.path.join(OUT_DIR, "mdd_per_attribute_counts.csv"), index=False)
-
-    # 3) Per-sample detail (S/D/I + demographics)
-    pd.DataFrame(sample_rows).to_csv(os.path.join(OUT_DIR, "mdd_sample_detail.csv"), index=False)
-
-    # 4) Edit op totals
-    pd.DataFrame([{"S": total_S, "D": total_D, "I": total_I}]).to_csv(
-        os.path.join(OUT_DIR, "edit_ops_totals.csv"), index=False
-    )
-    
-    # 5) Edit op performance (per operation)
-    per_op_rows = [r for r in per_op_rows if r['op'] in ['M', 'S']]
-    pd.DataFrame(per_op_rows).to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"), index=False)
-
-    print("MDD done.")
-    print(f"  - {os.path.join(OUT_DIR,'mdd_summary.txt')}")
-    print(f"  - {os.path.join(OUT_DIR,'mdd_per_attribute_counts.csv')}")
-    print(f"  - {os.path.join(OUT_DIR,'mdd_sample_detail.csv')}")
-    print(f"  - {os.path.join(OUT_DIR,'edit_ops_totals.csv')}")
-
-if __name__ == "__main__":
-    main()
+print(f"Evaluation complete. Results saved to:\n  {OUT_DIR}")
