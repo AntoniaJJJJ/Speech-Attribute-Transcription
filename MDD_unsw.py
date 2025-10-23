@@ -124,7 +124,7 @@ def parse_alignment_string(aligned_str):
     return ops
 
 
-def att_similarity(pred_vec, true_vec):
+#def att_similarity(pred_vec, true_vec):
     """Return proportion of matching attributes."""
     if len(pred_vec) != len(true_vec):
         m = min(len(pred_vec), len(true_vec))
@@ -149,6 +149,11 @@ global_counts = Counter()
 per_att_counts = defaultdict(Counter)
 edit_ops = Counter()
 sample_rows = []
+edit_op_metrics = {
+    "match": Counter(),
+    "sub": Counter(),
+    "del": Counter(),
+}
 
 # ==================== PER SAMPLE ====================
 for idx, (sample, pred_groups) in enumerate(zip(dataset, predictions)):
@@ -189,28 +194,61 @@ for idx, (sample, pred_groups) in enumerate(zip(dataset, predictions)):
             # correct pronunciation → check detection
             can_att = phoneme_to_att.get(can_ph, [0]*n_groups)
             pred_att = pred_attr_vectors[canonical_seq.index(can_ph)] if can_ph in canonical_seq else [0]*n_groups
-            sim = att_similarity(pred_att, can_att)
-            if sim >= 0.5:
+
+            if pred_att == can_att:
                 global_counts["TA"] += 1
             else:
                 global_counts["FR"] += 1
+
+            # --- Per-attribute counting ---
+            for i, attr in enumerate(attribute_list):
+                t = can_att[i]
+                p = pred_att[i]
+                if t == 1 and p == 1:
+                    per_att_counts[attr]["TA"] += 1
+                elif t == 1 and p == 0:
+                    per_att_counts[attr]["FR"] += 1
+                elif t == 0 and p == 1:
+                    per_att_counts[attr]["FA"] += 1
+                else:
+                    per_att_counts[attr]["TR"] += 1
 
         elif op == "sub":
             # mispronounced → check if model detected difference
             can_att = phoneme_to_att.get(can_ph, [0]*n_groups)
             sp_att = phoneme_to_att.get(sp_ph, [0]*n_groups)
             pred_att = pred_attr_vectors[canonical_seq.index(can_ph)] if can_ph in canonical_seq else [0]*n_groups
-            sim_can = att_similarity(pred_att, can_att)
-            sim_sp = att_similarity(pred_att, sp_att)
-            if sim_can < 0.5 and sim_sp < 0.5:
+
+            if pred_att != can_att:
                 global_counts["TR"] += 1
-                global_counts["CD"] += 1  # Correctly diagnosed
+                edit_op_metrics["sub"]["TR"] += 1
+                if pred_att == sp_att:
+                    global_counts["CD"] += 1
+                    edit_op_metrics["sub"]["CD"] += 1
+                else:
+                    global_counts["DE"] += 1
+                    edit_op_metrics["sub"]["DE"] += 1
             else:
                 global_counts["FA"] += 1
-                global_counts["DE"] += 1  # Diagnosis error
+                edit_op_metrics["sub"]["FA"] += 1
+
+            # --- Per-attribute counting ---
+            for i, attr in enumerate(attribute_list):
+                t = can_att[i]
+                p = pred_att[i]
+                if t == 1 and p == 1:
+                    per_att_counts[attr]["TA"] += 1
+                elif t == 1 and p == 0:
+                    per_att_counts[attr]["FR"] += 1
+                elif t == 0 and p == 1:
+                    per_att_counts[attr]["FA"] += 1
+                else:
+                    per_att_counts[attr]["TR"] += 1
 
         elif op == "del":
+            global_counts["TR"] += 1
             global_counts["DE"] += 1
+            edit_op_metrics["del"]["DE"] += 1
 
         elif op == "ins":
             # insertion → counted in edit ops only
@@ -230,6 +268,7 @@ for idx, (sample, pred_groups) in enumerate(zip(dataset, predictions)):
         "Sub": edit_ops["sub"],
         "Del": edit_ops["del"],
         "Ins": edit_ops["ins"],
+        "Match": edit_ops["match"],
     })
 
 
@@ -269,10 +308,7 @@ pd.DataFrame.from_dict(edit_ops, orient="index", columns=["count"]).to_csv(
 )
 
 # ---- Edit-operation "performance" placeholder ----
-edit_perf = {}
-for op in ["sub", "del", "ins"]:
-    n = edit_ops[op]
-    edit_perf[op] = {"TP": n, "Precision": 1.0, "Recall": 1.0, "F1": 1.0 if n > 0 else 0.0}
-pd.DataFrame(edit_perf).T.to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"))
+df_ops = pd.DataFrame(edit_op_metrics).fillna(0).astype(int).T
+df_ops.to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"))
 
 print(f"Evaluation complete. Results saved to:\n  {OUT_DIR}")
