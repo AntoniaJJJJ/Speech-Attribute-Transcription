@@ -46,13 +46,8 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 def load_predictions(results_db):
     """Load model prediction JSONs from HuggingFace results DB."""
-    conn = sqlite3.connect(results_db)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, decoded FROM predictions ORDER BY id ASC")
-    rows = cursor.fetchall()
-    conn.close()
-    preds = [json.loads(r[1]) for r in rows]
-    return preds
+    dataset = load_from_disk(results_db)
+    return dataset["test"]["pred_str"]
 
 
 def load_attribute_list(path):
