@@ -197,8 +197,10 @@ for idx, (sample, pred_groups) in enumerate(zip(dataset, predictions)):
 
             if pred_att == can_att:
                 global_counts["TA"] += 1
+                edit_op_metrics["match"]["TA"] += 1
             else:
                 global_counts["FR"] += 1
+                edit_op_metrics["match"]["FR"] += 1
 
             # --- Per-attribute counting ---
             for i, attr in enumerate(attribute_list):
@@ -248,6 +250,7 @@ for idx, (sample, pred_groups) in enumerate(zip(dataset, predictions)):
         elif op == "del":
             global_counts["TR"] += 1
             global_counts["DE"] += 1
+            edit_op_metrics["del"]["TR"] += 1
             edit_op_metrics["del"]["DE"] += 1
 
         elif op == "ins":
