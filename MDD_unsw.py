@@ -308,6 +308,12 @@ pd.DataFrame.from_dict(edit_ops, orient="index", columns=["count"]).to_csv(
 )
 
 # ---- Edit-operation "performance" placeholder ----
+all_metrics = ["TA", "FR", "TR", "FA", "CD", "DE"]
+for op in edit_op_metrics:
+    for key in all_metrics:
+        if key not in edit_op_metrics[op]:
+            edit_op_metrics[op][key] = 0
+
 df_ops = pd.DataFrame(edit_op_metrics).fillna(0).astype(int).T
 df_ops.to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"))
 
