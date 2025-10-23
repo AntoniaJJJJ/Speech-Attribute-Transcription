@@ -55,13 +55,24 @@ def load_attribute_list(path):
         return [line.strip() for line in f.readlines() if line.strip()]
 
 
-def load_phoneme_to_att_map(csv_path, phoneme_col):
-    df = pd.read_csv(csv_path)
-    mapping = {}
+def load_phoneme_to_att_map(p2att_csv, phoneme_col):
+    df = pd.read_csv(p2att_csv)
+    attributes = [col for col in df.columns if col != phoneme_col]
+
+    phoneme_to_att = {}
+
     for _, row in df.iterrows():
-        phon = row[phoneme_col]
-        mapping[phon] = row.drop(phoneme_col).astype(int).tolist()
-    return mapping
+        phoneme = row[phoneme_col]
+        att_vec = []
+        for att in attributes:
+            val = row[att]
+            try:
+                att_vec.append(1 if int(val) == 1 else 0)
+            except:
+                att_vec.append(0)
+        phoneme_to_att[phoneme] = att_vec
+
+    return phoneme_to_att
 
 
 def load_diphthong_map(path):
