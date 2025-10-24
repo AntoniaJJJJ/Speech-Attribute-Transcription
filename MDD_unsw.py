@@ -31,14 +31,14 @@ from datasets import load_from_disk
 
 # ==================== CONFIG ====================
 
-RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db"
-ATTRIBUTE_LIST_FILE = "data/list_attributes-camb.txt"
-P2ATT_CSV = "data/Phoneme2att_camb_att_noDiph.csv"
-P2ATT_PHONEME_COL = "Phoneme_arpa"
-DECOUPLE_DIPH = True
+RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp22/exp22_2/results_unsw_test.db"
+ATTRIBUTE_LIST_FILE = "data/list_attributes_combined_us_au_Diph.txt"
+P2ATT_CSV = "data/Phoneme2att_combined_us_au_att_Diph_voiced1vowels.csv"
+P2ATT_PHONEME_COL = "Phoneme_combined"
+DECOUPLE_DIPH = False
 DIPH2MONO_FILE = "data/Diphthongs_en_us-arpa.csv"
-UNSW_DATASET_PATH = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped"
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_exp11_5"
+UNSW_DATASET_PATH = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped_ipa"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_exp22_2"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 
