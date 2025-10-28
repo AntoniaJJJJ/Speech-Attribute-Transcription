@@ -286,7 +286,7 @@ DE = global_counts["DE"]
 
 FAR = FA / (FA + TR + 1e-8)
 FRR = FR / (FR + TA + 1e-8)
-DER = (FA + FR) / (TA + TR + FA + FR + 1e-8)
+DER = DE / (CD + DE + 1e-8)
 F1 = 2 * TA / (2 * TA + FA + FR + 1e-8)
 CDR = CD / (CD + DE + 1e-8)
 
