@@ -413,14 +413,13 @@ for ph in high_err_phonemes:
             tgt_attr_seq = str(tgt_all[pos]).split("_")
             prd_attr_seq = str(prd_all[pos]).split("_")
             for t, p in zip(tgt_attr_seq, prd_attr_seq):
-                # Only compare if both look like "n_attr" or "p_attr"
-                if len(t) > 2 and len(p) > 2 and t[1] == "_" and p[1] == "_":
-                    attr_name = t[2:]
-                    t_state = t[0]
-                    p_state = p[0]
-                    # Count as mismatch only if the state differs (n vs p)
-                    if t_state != p_state:
-                        diff_counter[attr_name] += 1
+                if isinstance(t, str) and isinstance(p, str):
+                    if (t.startswith("n_") or t.startswith("p_")) and (p.startswith("n_") or p.startswith("p_")):
+                        attr_t = t[2:]
+                        attr_p = p[2:]
+                        if attr_t == attr_p and t[0] != p[0]:
+                            # same attribute but state flipped (n ↔ p)
+                            diff_counter[attr_t] += 1
             total_occurrences += 1
 
     if total_occurrences > 0:
