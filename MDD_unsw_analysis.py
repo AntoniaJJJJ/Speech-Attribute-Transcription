@@ -361,10 +361,24 @@ high_err_phonemes = pd.concat([
     df_der_sorted["canonical"]
 ]).unique()
 
-# --- Prepare prediction DataFrame ---
+# --- Align column naming and clean text ---
+if "canonical" not in df_mdd.columns and "phoneme_unsw" in df_mdd.columns:
+    df_mdd.rename(columns={"phoneme_unsw": "canonical"}, inplace=True)
+
+df_pred = df_pred.copy()
+df_pred["target_text"] = df_pred["target_text"].astype(str)
+df_pred["pred_str"] = df_pred["pred_str"].astype(str)
+df_pred = df_pred[df_pred["target_text"].str.len() > 0]
+df_pred = df_pred[df_pred["pred_str"].str.len() > 0]
+
+# --- Prepare lists for token-level comparison ---
 df_attr_pred = df_pred.copy()
-df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(lambda x: str(x).split() if isinstance(x, str) else [])
-df_attr_pred["pred_list"]   = df_attr_pred["pred_str"].apply(lambda x: str(x).split() if isinstance(x, str) else [])
+df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(
+    lambda x: str(x).split() if isinstance(x, str) and not pd.isna(x) else []
+)
+df_attr_pred["pred_list"] = df_attr_pred["pred_str"].apply(
+    lambda x: str(x).split() if isinstance(x, str) and not pd.isna(x) else []
+)
 
 records = []
 
@@ -374,20 +388,19 @@ for ph in high_err_phonemes:
     total_occurrences = 0
 
     # find all rows where this phoneme appears in canonical phoneme sequence
-    samples = df_mdd[df_mdd["canonical"].str.contains(ph, na=False)]
+    samples = df_mdd[df_mdd["canonical"].astype(str).str.contains(rf"\b{ph}\b", na=False)]
     for idx, row in samples.iterrows():
-        can_list = row["canonical"].split()
-        if ph not in can_list:
-            continue
+        can_list = str(row["canonical"]).split()
         pos_list = [i for i, p in enumerate(can_list) if p == ph]
-
-        # locate corresponding prediction row (assume index alignment)
-        if idx >= len(df_attr_pred):
+        if not pos_list:
             continue
-        tgt_all = df_attr_pred.iloc[idx]["target_list"]
-        prd_all = df_attr_pred.iloc[idx]["pred_list"]
 
-        # skip malformed rows
+        # locate corresponding prediction row safely
+        if idx not in df_attr_pred.index:
+            continue
+        tgt_all = df_attr_pred.at[idx, "target_list"]
+        prd_all = df_attr_pred.at[idx, "pred_list"]
+
         if not isinstance(tgt_all, list) or not isinstance(prd_all, list):
             continue
         if len(tgt_all) != len(prd_all):
@@ -395,11 +408,10 @@ for ph in high_err_phonemes:
 
         # compare attributes for this phoneme position only
         for pos in pos_list:
-            if pos >= len(tgt_all): 
+            if pos >= len(tgt_all):
                 continue
-            tgt_attr_seq = tgt_all[pos].split("_")
-            prd_attr_seq = prd_all[pos].split("_")
-
+            tgt_attr_seq = str(tgt_all[pos]).split("_")
+            prd_attr_seq = str(prd_all[pos]).split("_")
             for t, p in zip(tgt_attr_seq, prd_attr_seq):
                 if t != p and len(t) > 2 and len(p) > 2:
                     diff_counter[t[2:]] += 1
@@ -417,6 +429,7 @@ for ph in high_err_phonemes:
         }
         records.append(rec)
 
+# --- Save and plot ---
 df_diff = pd.DataFrame(records)
 df_diff.to_csv(os.path.join(OUT_DIR, "mdd_attribute_differences.csv"), index=False)
 print("Saved: mdd_attribute_differences.csv")
