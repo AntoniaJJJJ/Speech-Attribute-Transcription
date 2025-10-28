@@ -35,7 +35,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import sqlite3
+from datasets import load_from_disk
 from collections import Counter
 
 # ==================== CONFIG ====================
@@ -55,9 +55,11 @@ df_meta = pd.read_excel(UNSW_META)
 df_p2a = pd.read_csv(PHONEME2ATT)
 
 # --- Load attribute predictions from DB (train.py output) ---
-conn = sqlite3.connect(RESULTS_DB)
-df_pred = pd.read_sql_query("SELECT * FROM results", conn)
-conn.close()
+dataset = load_from_disk(RESULTS_DB)
+if "test" in dataset:
+    df_pred = dataset["test"].to_pandas()
+else:
+    df_pred = dataset.to_pandas()
 
 # --- Add age (years) ---
 df_meta["age_year"] = (df_meta["age"].astype(float) / 12).round(0).astype(int)
@@ -316,31 +318,28 @@ plt.close()
 # ==================== STAGE 4: ATTRIBUTE DIFFERENCE ANALYSIS ====================
 TOP_N = 10
 
-# --- Load phoneme→attribute mapping ---
-df_p2a = pd.read_csv(PHONEME2ATT)
-df_p2a.set_index(df_p2a.columns[0], inplace=True)
+# --- Use actual predicted vs target attribute strings ---
+df_attr_pred = df_pred[["target_text", "pred_str"]].copy()
+df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(lambda x: x.split())
+df_attr_pred["pred_list"]   = df_attr_pred["pred_str"].apply(lambda x: x.split())
 
-def phoneme_to_attr_vec(phoneme):
-    """Return binary vector for a phoneme based on mapping table."""
-    if phoneme not in df_p2a.index:
-        return None
-    return df_p2a.loc[phoneme].astype(int).to_dict()
+def extract_attr_name(attr_token):
+    """Convert 'p_voice'/'n_voice' → 'voice'."""
+    return attr_token[2:] if isinstance(attr_token, str) and "_" in attr_token else attr_token
 
-def compare_attr_vectors(can_ph, pred_ph):
-    """Return differing attributes (+1, -1, 0) between canonical and predicted phonemes."""
-    v1 = phoneme_to_attr_vec(can_ph)
-    v2 = phoneme_to_attr_vec(pred_ph)
-    if v1 is None or v2 is None:
-        return None
-    diff = {k: v2[k] - v1[k] for k in v1.keys()}
-    return {k: d for k, d in diff.items() if d != 0}
+def compare_attr_lists(target_list, pred_list):
+    """Return dict of attribute name → +1 (predicted 'p'), -1 (predicted 'n') when flipped."""
+    diffs = {}
+    for t, p in zip(target_list, pred_list):
+        if t != p and "_" in t and "_" in p:
+            base = extract_attr_name(t)
+            diffs[base] = diffs.get(base, 0) + 1
+    return diffs
 
-# --- Identify high-error phonemes ---
+# --- Identify top-error phonemes (from Stage 1 summary) ---
 df_far_sorted = df_phoneme.sort_values("FAR", ascending=False).head(TOP_N)
 df_frr_sorted = df_phoneme.sort_values("FRR", ascending=False).head(TOP_N)
-
 high_err_phonemes = pd.concat([df_far_sorted["canonical"], df_frr_sorted["canonical"]]).unique()
-print(f"Top {len(high_err_phonemes)} high-error phonemes selected.")
 
 records = []
 
@@ -352,25 +351,24 @@ for ph in high_err_phonemes:
     diff_counter = Counter()
     valid_pairs = 0
 
-    for _, row in subset.iterrows():
-        can_ph, pred_ph = row["canonical"], row["predicted"]
-        if can_ph == "" or pred_ph == "" or can_ph == pred_ph:
-            continue
-        diffs = compare_attr_vectors(can_ph, pred_ph)
+    # compare corresponding attribute strings from df_pred (same order)
+    for i in range(min(len(df_attr_pred), len(subset))):
+        diffs = compare_attr_lists(df_attr_pred.iloc[i]["target_list"],
+                                   df_attr_pred.iloc[i]["pred_list"])
         if diffs:
-            for k in diffs.keys():
-                diff_counter[k] += 1
+            for k, v in diffs.items():
+                diff_counter[k] += v
             valid_pairs += 1
 
     if valid_pairs > 0:
         top_diffs = diff_counter.most_common(5)
         rec = {
             "Phoneme": ph,
-            "Top_Diff_Attributes": ", ".join([f"{k}({v})" for k, v in top_diffs]),
             "Samples": valid_pairs,
+            "Top_Attribute_Differences": ", ".join([f"{k}({v})" for k, v in top_diffs]),
             "FAR": df_phoneme.loc[df_phoneme["canonical"] == ph, "FAR"].values[0],
             "FRR": df_phoneme.loc[df_phoneme["canonical"] == ph, "FRR"].values[0],
-            "DER": df_phoneme.loc[df_phoneme["canonical"] == ph, "DER"].values[0]
+            "DER": df_phoneme.loc[df_phoneme["canonical"] == ph, "DER"].values[0],
         }
         records.append(rec)
 
@@ -378,8 +376,7 @@ df_diff = pd.DataFrame(records)
 df_diff.to_csv(os.path.join(OUT_DIR, "mdd_attribute_differences.csv"), index=False)
 print("Saved: mdd_attribute_differences.csv")
 
-
-# --- Plot top-error phonemes by FAR / FRR / DER ---
+# --- Plots of high-error phonemes ---
 plt.figure(figsize=(10,6))
 plt.bar(df_far_sorted["canonical"], df_far_sorted["FAR"], color="tab:red")
 plt.title(f"Top {TOP_N} Phonemes – Highest FAR")
