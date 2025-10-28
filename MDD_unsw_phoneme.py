@@ -33,7 +33,7 @@ PREDICTED_DATASET = "/srv/scratch/z5369417/outputs/transcriber_result/combined_m
 OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp22"
 os.makedirs(OUT_DIR, exist_ok=True)
 
-PHONEME_CANONICAL = "phoneme_combined"
+PHONEME_CANONICAL = "phoneme_unsw"
 PHONEME_SPOKEN = "actual_spoken_phonemes"
 PHONEME_PREDICTED = "pred_phoneme"
 DECOUPLE_DIPH = False
