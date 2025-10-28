@@ -64,7 +64,7 @@ def decouple_diphthongs(phoneme_str, diph_map):
 
 # ==================== LOAD DATA ====================
 
-dataset = load_from_disk(PREDICTED_DATASET)["test"]
+dataset = load_from_disk(PREDICTED_DATASET)
 diph_map = load_diphthong_map(DIPHTHONG_MAP_FILE)
 
 # Use same alignment logic as transcribe_SA / cm.py
