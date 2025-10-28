@@ -11,7 +11,6 @@ Purpose:
 - Use canonical vs spoken phonemes, predicted phonemes, and alignments.
 - Compute detection and diagnosis metrics (TA, FR, FA, TR, CD, DE)
   and edit operation statistics (Sub / Del / Ins).
-- Guarantee 100% consistency with train.py / transcribe_SA evaluation.
 
 Outputs:
     mdd_summary.txt
@@ -24,7 +23,8 @@ import os
 import pandas as pd
 from collections import Counter
 from datasets import load_from_disk
-from metrics.cm import phoneme_confusion_matrix
+import jiwer.transforms as tr
+import Levenshtein
 
 # ==================== CONFIG ====================
 
@@ -62,14 +62,79 @@ def decouple_diphthongs(phoneme_str, diph_map):
             out.append(p)
     return out
 
+# ==================== ALIGNMENT (same as cm.py) ====================
+
+_default_transform = tr.Compose([
+    tr.RemoveMultipleSpaces(),
+    tr.Strip(),
+    tr.ReduceToSingleSentence(),
+    tr.ReduceToListOfListOfWords(),
+])
+
+def preprocess_for_alignment(ref_str, pred_str):
+    """Exact preprocessing from cm.py."""
+    truth = _default_transform(ref_str)
+    hypothesis = _default_transform(pred_str)
+    assert len(truth) == 1 and len(hypothesis) == 1
+
+    truth = truth[0]
+    hypothesis = hypothesis[0]
+
+    # Create a shared symbol map (1 unique char per unique phoneme)
+    mapper = dict([(k, v) for v, k in enumerate(set(truth + hypothesis))])
+    truth_chars = [chr(mapper[p]) for p in truth]
+    pred_chars = [chr(mapper[p]) for p in hypothesis]
+
+    return truth, hypothesis, "".join(truth_chars), "".join(pred_chars)
+
+def align_like_cm(ref_phonemes, pred_phonemes):
+    """
+    Reproduce cm.py alignment using Levenshtein.editops on char-mapped sequences.
+    Returns a list of (ref_phoneme, pred_phoneme) tuples.
+    """
+    ref_str = " ".join(ref_phonemes)
+    pred_str = " ".join(pred_phonemes)
+    ref_list, pred_list, ref_chars, pred_chars = preprocess_for_alignment(ref_str, pred_str)
+
+    ops = Levenshtein.editops(ref_chars, pred_chars)
+    aligned_pairs = []
+    ref_i, pred_i = 0, 0
+
+    for op, i1, i2 in ops:
+        while ref_i < i1 and pred_i < i2:
+            aligned_pairs.append((ref_list[ref_i], pred_list[pred_i]))
+            ref_i += 1
+            pred_i += 1
+
+        if op == "insert":
+            aligned_pairs.append(("", pred_list[i2]))
+            pred_i += 1
+        elif op == "delete":
+            aligned_pairs.append((ref_list[i1], ""))
+            ref_i += 1
+        elif op == "replace":
+            aligned_pairs.append((ref_list[i1], pred_list[i2]))
+            ref_i += 1
+            pred_i += 1
+
+    # Append remaining aligned tail (if sequences end unevenly)
+    while ref_i < len(ref_list) and pred_i < len(pred_list):
+        aligned_pairs.append((ref_list[ref_i], pred_list[pred_i]))
+        ref_i += 1
+        pred_i += 1
+    while ref_i < len(ref_list):
+        aligned_pairs.append((ref_list[ref_i], ""))
+        ref_i += 1
+    while pred_i < len(pred_list):
+        aligned_pairs.append(("", pred_list[pred_i]))
+        pred_i += 1
+
+    return aligned_pairs
+
 # ==================== LOAD DATA ====================
 
 dataset = load_from_disk(PREDICTED_DATASET)
 diph_map = load_diphthong_map(DIPHTHONG_MAP_FILE)
-
-# Use same alignment logic as transcribe_SA / cm.py
-cm_metric = phoneme_confusion_matrix()
-align_fn = cm_metric._levenshtein_align  # ensures exact match with cm.py behavior
 
 global_counts = Counter()
 edit_ops = Counter()
@@ -82,8 +147,8 @@ for sample in dataset:
     spoken = decouple_diphthongs(sample[PHONEME_SPOKEN], diph_map)
     predicted = decouple_diphthongs(sample[PHONEME_PREDICTED], diph_map)
 
-    align_can = align_fn(canonical, predicted)
-    align_spo = align_fn(spoken, predicted)
+    align_can = align_like_cm(canonical, predicted)
+    align_spo = align_like_cm(spoken, predicted)
 
     for (can_ph, pred_ph), (_, spo_ph) in zip(align_can, align_spo):
         if can_ph == '' and pred_ph != '':
