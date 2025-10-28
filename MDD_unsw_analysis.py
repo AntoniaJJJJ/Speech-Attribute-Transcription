@@ -443,7 +443,7 @@ for ph in high_err_phonemes:
                         flipped_any = True
 
             # count this phoneme occurrence (whether flipped or not)
-            total_occurrences += 1
+            total_occurrences += len(pos_list)
 
     if total_occurrences > 0:
         top_diffs = diff_counter.most_common(5)
