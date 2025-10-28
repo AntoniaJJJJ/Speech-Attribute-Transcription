@@ -16,6 +16,7 @@ Outputs:
     mdd_summary.txt
     mdd_sample_detail.csv
     edit_ops_totals.csv
+    edit_ops_performance.csv
 ============================================================
 """
 
@@ -140,6 +141,7 @@ global_counts = Counter()
 edit_ops = Counter()
 sample_rows = []
 
+
 # ==================== MAIN EVALUATION ====================
 
 for sample in dataset:
@@ -195,6 +197,58 @@ for sample in dataset:
         "spoken": sample[PHONEME_SPOKEN],
         "predicted": sample[PHONEME_PREDICTED],
     })
+
+# ==================== PER-OPERATION SUMMARY ====================
+
+# prepare per-op matrix
+per_op_counts = {
+    "match": Counter(),
+    "sub": Counter(),
+    "del": Counter(),
+    "ins": Counter()
+}
+
+# recompute counts per operation type
+for sample in dataset:
+    canonical = decouple_diphthongs(sample[PHONEME_CANONICAL], diph_map)
+    spoken = decouple_diphthongs(sample[PHONEME_SPOKEN], diph_map)
+    predicted = decouple_diphthongs(sample[PHONEME_PREDICTED], diph_map)
+
+    align_can = align_like_cm(canonical, predicted)
+    align_spo = align_like_cm(spoken, predicted)
+
+    for (can_ph, pred_ph), (_, spo_ph) in zip(align_can, align_spo):
+
+        # determine op type exactly as editops semantic
+        if can_ph == '' and pred_ph != '':
+            op = "ins"
+            per_op_counts[op]["TR"] += 1
+            per_op_counts[op]["CD" if pred_ph == spo_ph else "DE"] += 1
+
+        elif can_ph != '' and pred_ph == '':
+            op = "del"
+            per_op_counts[op]["TR"] += 1
+            per_op_counts[op]["CD" if spo_ph == '' else "DE"] += 1
+
+        elif can_ph == pred_ph:
+            op = "match"
+            per_op_counts[op]["TA" if can_ph == spo_ph else "FA"] += 1
+
+        else:
+            op = "sub"
+            if can_ph == spo_ph:
+                per_op_counts[op]["FR"] += 1
+            else:
+                per_op_counts[op]["TR"] += 1
+                per_op_counts[op]["CD" if pred_ph == spo_ph else "DE"] += 1
+
+# convert to DataFrame (rows = ops, cols = metrics)
+edit_ops_perf_df = pd.DataFrame(per_op_counts).T.fillna(0).astype(int)
+edit_ops_perf_df = edit_ops_perf_df[["TA", "FR", "TR", "FA", "CD", "DE"]]  # ordered columns
+
+# save to CSV
+edit_ops_perf_path = os.path.join(OUT_DIR, "edit_ops_performance.csv")
+edit_ops_perf_df.to_csv(edit_ops_perf_path)
 
 # ==================== METRICS ====================
 
