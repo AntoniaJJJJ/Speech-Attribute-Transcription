@@ -29,13 +29,14 @@ import Levenshtein
 
 # ==================== CONFIG ====================
 
-PREDICTED_DATASET = "/srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_unsw"
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_phoneme_level_exp11"
+PREDICTED_DATASET = "/srv/scratch/z5369417/outputs/transcriber_result/combined_model_exp22_test_on_unsw"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp22"
 os.makedirs(OUT_DIR, exist_ok=True)
 
-PHONEME_CANONICAL = "phoneme_unsw"
+PHONEME_CANONICAL = "phoneme_combined"
 PHONEME_SPOKEN = "actual_spoken_phonemes"
 PHONEME_PREDICTED = "pred_phoneme"
+DECOUPLE_DIPH = False
 DIPHTHONG_MAP_FILE = "data/Diphthongs_en_us-arpa.csv"
 
 # ==================== HELPERS ====================
@@ -52,12 +53,12 @@ def load_diphthong_map(path):
         for x in lines
     )
 
-def decouple_diphthongs(phoneme_str, diph_map):
+def decouple_diphthongs(phoneme_str, diph_map, decouple=False):
     """Apply diphthong-to-monophthong mapping."""
     phs = phoneme_str.strip().split()
     out = []
     for p in phs:
-        if p in diph_map:
+        if decouple and p in diph_map:
             out.extend(diph_map[p])
         else:
             out.append(p)
@@ -145,9 +146,9 @@ sample_rows = []
 # ==================== MAIN EVALUATION ====================
 
 for sample in dataset:
-    canonical = decouple_diphthongs(sample[PHONEME_CANONICAL], diph_map)
-    spoken = decouple_diphthongs(sample[PHONEME_SPOKEN], diph_map)
-    predicted = decouple_diphthongs(sample[PHONEME_PREDICTED], diph_map)
+    canonical = decouple_diphthongs(sample[PHONEME_CANONICAL], diph_map, decouple=DECOUPLE_DIPH)
+    spoken = decouple_diphthongs(sample[PHONEME_SPOKEN], diph_map, decouple=DECOUPLE_DIPH)
+    predicted = decouple_diphthongs(sample[PHONEME_PREDICTED], diph_map, decouple=DECOUPLE_DIPH)
 
     align_can = align_like_cm(canonical, predicted)
     align_spo = align_like_cm(spoken, predicted)
