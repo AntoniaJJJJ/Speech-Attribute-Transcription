@@ -218,8 +218,25 @@ def compute_phoneme_summary(df):
     return group.reset_index()
 
 df_phoneme = compute_phoneme_summary(df_phoneme_detail)
+df_phoneme.loc[df_phoneme["canonical"] == "", "canonical"] = "[INSERTION]"
 df_phoneme.to_csv(os.path.join(OUT_DIR, "mdd_phoneme_summary.csv"), index=False)
 print("Saved: mdd_phoneme_summary.csv")
+
+plt.figure(figsize=(14,6))
+x = np.arange(len(df_phoneme["canonical"]))
+width = 0.25
+
+plt.bar(x - width, df_phoneme["FAR"], width, label="FAR")
+plt.bar(x,         df_phoneme["FRR"], width, label="FRR")
+plt.bar(x + width, df_phoneme["DER"], width, label="DER")
+
+plt.xticks(x, df_phoneme["canonical"], rotation=90)
+plt.ylabel("Error Rate")
+plt.title("Phoneme-Level Error Rates (FAR / FRR / DER)")
+plt.legend()
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "phoneme_error_rates.png"))
+plt.close()
 
 # ==================== STAGE 2: ATTRIBUTE-LEVEL SUMMARY ====================
 
@@ -240,9 +257,7 @@ for att in df_p2a.columns:
         "n_phonemes": len(pos_phonemes),
         "Mean_FAR": subset["FAR"].mean(),
         "Mean_FRR": subset["FRR"].mean(),
-        "Mean_DER": subset["DER"].mean(),
-        "Mean_TA": subset["TA"].sum() / (subset["TA"].sum() + subset["FR"].sum() + 1e-8),
-        "Mean_FA": subset["FA"].sum() / (subset["FA"].sum() + subset["TR"].sum() + 1e-8)
+        "Mean_DER": subset["DER"].mean()
     }
     attr_summary.append(row)
 
@@ -250,16 +265,21 @@ df_attr = pd.DataFrame(attr_summary).sort_values("Mean_TA", ascending=False)
 df_attr.to_csv(os.path.join(OUT_DIR, "mdd_attribute_summary.csv"), index=False)
 print("Saved: mdd_attribute_summary.csv")
 
-# --- Attribute heatmap ---
-plt.figure(figsize=(8,6))
-plt.imshow(df_attr[["Mean_TA","Mean_FA","Mean_FAR","Mean_FRR","Mean_DER"]].T,
-           aspect='auto', cmap="viridis")
-plt.yticks(range(5), ["TA","FA","FAR","FRR","DER"])
-plt.xticks(range(len(df_attr)), df_attr["Attribute"], rotation=90)
-plt.title("Attribute-Level Error Distribution")
-plt.colorbar(label="Mean Rate")
+# --- ATTRIBUTE-LEVEL ERROR RATES ---
+plt.figure(figsize=(14,6))
+x = np.arange(len(df_attr["Attribute"]))
+width = 0.25
+
+plt.bar(x - width, df_attr["Mean_FAR"], width, label="FAR")
+plt.bar(x,         df_attr["Mean_FRR"], width, label="FRR")
+plt.bar(x + width, df_attr["Mean_DER"], width, label="DER")
+
+plt.xticks(x, df_attr["Attribute"], rotation=90)
+plt.ylabel("Error Rate")
+plt.title("Attribute-Level Error Rates (FAR / FRR / DER)")
+plt.legend()
 plt.tight_layout()
-plt.savefig(os.path.join(OUT_DIR, "attribute_error_heatmap.png"))
+plt.savefig(os.path.join(OUT_DIR, "attribute_error_rates.png"))
 plt.close()
 
 # ==================== STAGE 3: DEMOGRAPHIC ANALYSIS ====================
@@ -274,10 +294,18 @@ def aggregate_demographic(df, group_vars):
 
 
 # --- Age groups ---
-bins = [0, 5, 7, 9, 11, 13, 20]
-labels = ["≤5", "6-7", "8-9", "10-11", "12-13", "≥14"]
-df_phoneme_detail["age_group"] = pd.cut(df_phoneme_detail["age_year"],
-                                        bins=bins, labels=labels, right=False)
+df_phoneme_detail["age_group"] = (
+    df_phoneme_detail["age_year"]
+    .astype(int)
+    .astype(str)
+)
+
+# ensure correct numeric ordering on plots
+df_phoneme_detail["age_group"] = pd.Categorical(
+    df_phoneme_detail["age_group"],
+    categories=sorted(df_phoneme_detail["age_group"].unique(), key=int),
+    ordered=True
+)
 
 # --- Aggregate by age and gender ---
 df_demo_age = aggregate_demographic(df_phoneme_detail, ["age_group"])
@@ -303,13 +331,17 @@ plt.close()
 
 
 # --- Plot: gender ---
-plt.figure(figsize=(5,5))
-barw = 0.3
-genders = df_demo_gender["gender"]
-plt.bar(genders, df_demo_gender["FAR"], width=barw, label="FAR")
-plt.bar(genders, df_demo_gender["FRR"], width=barw, bottom=df_demo_gender["FAR"], label="FRR")
-plt.title("Error Rates by Gender")
+plt.figure(figsize=(6,5))
+x = np.arange(len(df_demo_gender["gender"]))
+width = 0.25
+
+plt.bar(x - width, df_demo_gender["FAR"], width, label="FAR")
+plt.bar(x,         df_demo_gender["FRR"], width, label="FRR")
+plt.bar(x + width, df_demo_gender["DER"], width, label="DER")
+
+plt.xticks(x, df_demo_gender["gender"])
 plt.ylabel("Rate")
+plt.title("Error Rates by Gender")
 plt.legend()
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "demographic_gender_trends.png"))
@@ -318,57 +350,70 @@ plt.close()
 # ==================== STAGE 4: ATTRIBUTE DIFFERENCE ANALYSIS ====================
 TOP_N = 10
 
-# --- Use actual predicted vs target attribute strings ---
-df_attr_pred = df_pred[["target_text", "pred_str"]].copy()
-df_attr_pred["target_list"] = df_attr_pred["target_text"].astype(str).fillna("").apply(lambda x: x.split())
-df_attr_pred["pred_list"]   = df_attr_pred["pred_str"].astype(str).fillna("").apply(lambda x: x.split())
-
-def extract_attr_name(attr_token):
-    """Convert 'p_voice'/'n_voice' → 'voice'."""
-    return attr_token[2:] if isinstance(attr_token, str) and "_" in attr_token else attr_token
-
-def compare_attr_lists(target_list, pred_list):
-    """Return dict of attribute name → +1 (predicted 'p'), -1 (predicted 'n') when flipped."""
-    diffs = {}
-    for t, p in zip(target_list, pred_list):
-        if t != p and "_" in t and "_" in p:
-            base = extract_attr_name(t)
-            diffs[base] = diffs.get(base, 0) + 1
-    return diffs
-
-# --- Identify top-error phonemes (from Stage 1 summary) ---
+# --- Identify top error phonemes ---
 df_far_sorted = df_phoneme.sort_values("FAR", ascending=False).head(TOP_N)
 df_frr_sorted = df_phoneme.sort_values("FRR", ascending=False).head(TOP_N)
-high_err_phonemes = pd.concat([df_far_sorted["canonical"], df_frr_sorted["canonical"]]).unique()
+df_der_sorted = df_phoneme.sort_values("DER", ascending=False).head(TOP_N)
+
+high_err_phonemes = pd.concat([
+    df_far_sorted["canonical"],
+    df_frr_sorted["canonical"],
+    df_der_sorted["canonical"]
+]).unique()
+
+# --- Prepare prediction DataFrame ---
+df_attr_pred = df_pred.copy()
+df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(lambda x: str(x).split() if isinstance(x, str) else [])
+df_attr_pred["pred_list"]   = df_attr_pred["pred_str"].apply(lambda x: str(x).split() if isinstance(x, str) else [])
 
 records = []
 
+# --- Loop over high-error phonemes ---
 for ph in high_err_phonemes:
-    subset = df_phoneme_detail[df_phoneme_detail["canonical"] == ph]
-    if len(subset) == 0:
-        continue
-
     diff_counter = Counter()
-    valid_pairs = 0
+    total_occurrences = 0
 
-    # compare corresponding attribute strings from df_pred (same order)
-    for i in range(min(len(df_attr_pred), len(subset))):
-        diffs = compare_attr_lists(df_attr_pred.iloc[i]["target_list"],
-                                   df_attr_pred.iloc[i]["pred_list"])
-        if diffs:
-            for k, v in diffs.items():
-                diff_counter[k] += v
-            valid_pairs += 1
+    # find all rows where this phoneme appears in canonical phoneme sequence
+    samples = df_mdd[df_mdd["canonical"].str.contains(ph, na=False)]
+    for idx, row in samples.iterrows():
+        can_list = row["canonical"].split()
+        if ph not in can_list:
+            continue
+        pos_list = [i for i, p in enumerate(can_list) if p == ph]
 
-    if valid_pairs > 0:
+        # locate corresponding prediction row (assume index alignment)
+        if idx >= len(df_attr_pred):
+            continue
+        tgt_all = df_attr_pred.iloc[idx]["target_list"]
+        prd_all = df_attr_pred.iloc[idx]["pred_list"]
+
+        # skip malformed rows
+        if not isinstance(tgt_all, list) or not isinstance(prd_all, list):
+            continue
+        if len(tgt_all) != len(prd_all):
+            continue
+
+        # compare attributes for this phoneme position only
+        for pos in pos_list:
+            if pos >= len(tgt_all): 
+                continue
+            tgt_attr_seq = tgt_all[pos].split("_")
+            prd_attr_seq = prd_all[pos].split("_")
+
+            for t, p in zip(tgt_attr_seq, prd_attr_seq):
+                if t != p and len(t) > 2 and len(p) > 2:
+                    diff_counter[t[2:]] += 1
+            total_occurrences += 1
+
+    if total_occurrences > 0:
         top_diffs = diff_counter.most_common(5)
         rec = {
             "Phoneme": ph,
-            "Samples": valid_pairs,
+            "Samples": total_occurrences,
             "Top_Attribute_Differences": ", ".join([f"{k}({v})" for k, v in top_diffs]),
-            "FAR": df_phoneme.loc[df_phoneme["canonical"] == ph, "FAR"].values[0],
-            "FRR": df_phoneme.loc[df_phoneme["canonical"] == ph, "FRR"].values[0],
-            "DER": df_phoneme.loc[df_phoneme["canonical"] == ph, "DER"].values[0],
+            "FAR": float(df_phoneme.loc[df_phoneme["canonical"] == ph, "FAR"].values[0]),
+            "FRR": float(df_phoneme.loc[df_phoneme["canonical"] == ph, "FRR"].values[0]),
+            "DER": float(df_phoneme.loc[df_phoneme["canonical"] == ph, "DER"].values[0]),
         }
         records.append(rec)
 
@@ -376,10 +421,10 @@ df_diff = pd.DataFrame(records)
 df_diff.to_csv(os.path.join(OUT_DIR, "mdd_attribute_differences.csv"), index=False)
 print("Saved: mdd_attribute_differences.csv")
 
-# --- Plots of high-error phonemes ---
+# --- Plot top-error phonemes by FAR / FRR / DER ---
 plt.figure(figsize=(10,6))
 plt.bar(df_far_sorted["canonical"], df_far_sorted["FAR"], color="tab:red")
-plt.title(f"Top {TOP_N} Phonemes – Highest FAR")
+plt.title(f"Top {TOP_N} Phonemes with Highest FAR")
 plt.ylabel("FAR")
 plt.xticks(rotation=90)
 plt.tight_layout()
@@ -388,9 +433,20 @@ plt.close()
 
 plt.figure(figsize=(10,6))
 plt.bar(df_frr_sorted["canonical"], df_frr_sorted["FRR"], color="tab:orange")
-plt.title(f"Top {TOP_N} Phonemes – Highest FRR")
+plt.title(f"Top {TOP_N} Phonemes with Highest FRR")
 plt.ylabel("FRR")
 plt.xticks(rotation=90)
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "top_phonemes_FRR.png"))
 plt.close()
+
+plt.figure(figsize=(10,6))
+plt.bar(df_der_sorted["canonical"], df_der_sorted["DER"], color="tab:purple")
+plt.title(f"Top {TOP_N} Phonemes with Highest DER")
+plt.ylabel("DER")
+plt.xticks(rotation=90)
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "top_phonemes_DER.png"))
+plt.close()
+
+print("Saved: top_phonemes_FAR.png / FRR.png / DER.png")
