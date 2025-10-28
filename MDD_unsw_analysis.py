@@ -320,8 +320,8 @@ TOP_N = 10
 
 # --- Use actual predicted vs target attribute strings ---
 df_attr_pred = df_pred[["target_text", "pred_str"]].copy()
-df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(lambda x: x.split())
-df_attr_pred["pred_list"]   = df_attr_pred["pred_str"].apply(lambda x: x.split())
+df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(lambda x: str(x).split() if isinstance(x, str) or not pd.isna(x) else [])
+df_attr_pred["pred_list"]   = df_attr_pred["pred_str"].apply(lambda x: str(x).split() if isinstance(x, str) or not pd.isna(x) else [])
 
 def extract_attr_name(attr_token):
     """Convert 'p_voice'/'n_voice' → 'voice'."""
