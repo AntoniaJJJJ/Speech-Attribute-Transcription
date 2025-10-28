@@ -158,9 +158,9 @@ df_all = df_mdd.merge(df_meta[["word", "age_year", "gender", "speech_status"]],
 all_records = []
 
 for _, sample in df_all.iterrows():
-    can = sample["canonical"].split()
-    spo = sample["spoken"].split()
-    pred = sample["predicted"].split()
+    can = str(sample.get("canonical", "") or "").split()
+    spo = str(sample.get("spoken", "") or "").split()
+    pred = str(sample.get("predicted", "") or "").split()
 
     align_can = align_like_cm(can, pred)
     align_spo = align_like_cm(spo, pred)
