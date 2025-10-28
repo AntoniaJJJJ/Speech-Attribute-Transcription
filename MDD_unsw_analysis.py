@@ -35,8 +35,10 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import ast
 from datasets import load_from_disk
 from collections import Counter
+
 
 # ==================== CONFIG ====================
 
@@ -350,35 +352,41 @@ plt.close()
 # ==================== STAGE 4: ATTRIBUTE DIFFERENCE ANALYSIS ====================
 TOP_N = 10
 
-# --- Identify top error phonemes ---
+# --- Identify top-error phonemes (by FAR/FRR/DER) ---
 df_far_sorted = df_phoneme.sort_values("FAR", ascending=False).head(TOP_N)
 df_frr_sorted = df_phoneme.sort_values("FRR", ascending=False).head(TOP_N)
 df_der_sorted = df_phoneme.sort_values("DER", ascending=False).head(TOP_N)
-
 high_err_phonemes = pd.concat([
     df_far_sorted["canonical"],
     df_frr_sorted["canonical"],
     df_der_sorted["canonical"]
-]).unique()
+]).dropna().unique()
 
-# --- Align column naming and clean text ---
-if "canonical" not in df_mdd.columns and "phoneme_unsw" in df_mdd.columns:
-    df_mdd.rename(columns={"phoneme_unsw": "canonical"}, inplace=True)
+# --- Normalise attribute prediction columns to list[str] of per-attribute sequences ---
+def _to_list_of_str(x):
+    if isinstance(x, list):
+        return [str(y) for y in x]
+    # numpy array
+    if hasattr(x, "tolist"):
+        return [str(y) for y in x.tolist()]
+    if isinstance(x, str):
+        # stringified list? try to parse
+        s = x.strip()
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                v = ast.literal_eval(s)
+                if isinstance(v, list):
+                    return [str(y) for y in v]
+            except Exception:
+                pass
+        return [s]
+    if pd.isna(x):
+        return []
+    return [str(x)]
 
-df_pred = df_pred.copy()
-df_pred["target_text"] = df_pred["target_text"].astype(str)
-df_pred["pred_str"] = df_pred["pred_str"].astype(str)
-df_pred = df_pred[df_pred["target_text"].str.len() > 0]
-df_pred = df_pred[df_pred["pred_str"].str.len() > 0]
-
-# --- Prepare lists for token-level comparison ---
 df_attr_pred = df_pred.copy()
-df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(
-    lambda x: str(x).split() if isinstance(x, str) and not pd.isna(x) else []
-)
-df_attr_pred["pred_list"] = df_attr_pred["pred_str"].apply(
-    lambda x: str(x).split() if isinstance(x, str) and not pd.isna(x) else []
-)
+df_attr_pred["target_list"] = df_attr_pred["target_text"].apply(_to_list_of_str)
+df_attr_pred["pred_list"]   = df_attr_pred["pred_str"].apply(_to_list_of_str)
 
 records = []
 
@@ -387,39 +395,54 @@ for ph in high_err_phonemes:
     diff_counter = Counter()
     total_occurrences = 0
 
-    # find all rows where this phoneme appears in canonical phoneme sequence
+    # rows where canonical contains this phoneme (word-level)
     samples = df_mdd[df_mdd["canonical"].astype(str).str.contains(rf"\b{ph}\b", na=False)]
+
     for idx, row in samples.iterrows():
         can_list = str(row["canonical"]).split()
         pos_list = [i for i, p in enumerate(can_list) if p == ph]
         if not pos_list:
             continue
 
-        # locate corresponding prediction row safely
+        # fetch aligned attribute rows (same row index assumption)
         if idx not in df_attr_pred.index:
             continue
-        tgt_all = df_attr_pred.at[idx, "target_list"]
-        prd_all = df_attr_pred.at[idx, "pred_list"]
+        tgt_attr_rows = df_attr_pred.at[idx, "target_list"]  # list[str], each "n_attr ... p_attr"
+        prd_attr_rows = df_attr_pred.at[idx, "pred_list"]
 
-        if not isinstance(tgt_all, list) or not isinstance(prd_all, list):
-            continue
-        if len(tgt_all) != len(prd_all):
+        if not isinstance(tgt_attr_rows, list) or not isinstance(prd_attr_rows, list):
             continue
 
-        # compare attributes for this phoneme position only
+        # ensure same number of attributes on both sides
+        K = min(len(tgt_attr_rows), len(prd_attr_rows))
+        if K == 0:
+            continue
+
+        # for each occurrence of this phoneme position
         for pos in pos_list:
-            if pos >= len(tgt_all):
-                continue
-            tgt_attr_seq = str(tgt_all[pos]).split("_")
-            prd_attr_seq = str(prd_all[pos]).split("_")
-            for t, p in zip(tgt_attr_seq, prd_attr_seq):
-                if isinstance(t, str) and isinstance(p, str):
-                    if (t.startswith("n_") or t.startswith("p_")) and (p.startswith("n_") or p.startswith("p_")):
-                        attr_t = t[2:]
-                        attr_p = p[2:]
-                        if attr_t == attr_p and t[0] != p[0]:
-                            # same attribute but state flipped (n ↔ p)
-                            diff_counter[attr_t] += 1
+            flipped_any = False
+
+            # iterate over attributes (rows)
+            for k in range(K):
+                tgt_states = str(tgt_attr_rows[k]).split()  # e.g. "n_a n_a p_a ..." → ["n_a","n_a","p_a",...]
+                prd_states = str(prd_attr_rows[k]).split()
+
+                if pos >= len(tgt_states) or pos >= len(prd_states):
+                    continue
+
+                t_state = tgt_states[pos]  # "n_a"
+                p_state = prd_states[pos]  # "p_a"
+
+                # valid pair and same attribute name?
+                if (isinstance(t_state, str) and isinstance(p_state, str) and
+                    (t_state.startswith(("n_","p_")) and p_state.startswith(("n_","p_")))):
+                    attr_t = t_state[2:]
+                    attr_p = p_state[2:]
+                    if attr_t == attr_p and (t_state[0] != p_state[0]):
+                        diff_counter[attr_t] += 1
+                        flipped_any = True
+
+            # count this phoneme occurrence (whether flipped or not)
             total_occurrences += 1
 
     if total_occurrences > 0:
@@ -427,17 +450,16 @@ for ph in high_err_phonemes:
         rec = {
             "Phoneme": ph,
             "Samples": total_occurrences,
-            "Top_Attribute_Differences": ", ".join([f"{k}({v})" for k, v in top_diffs]),
+            "Top_Attribute_Differences": ", ".join([f"{k}({v})" for k, v in top_diffs]) if top_diffs else "",
             "FAR": float(df_phoneme.loc[df_phoneme["canonical"] == ph, "FAR"].values[0]),
             "FRR": float(df_phoneme.loc[df_phoneme["canonical"] == ph, "FRR"].values[0]),
             "DER": float(df_phoneme.loc[df_phoneme["canonical"] == ph, "DER"].values[0]),
         }
         records.append(rec)
 
-# --- Save and plot ---
 df_diff = pd.DataFrame(records)
 df_diff.to_csv(os.path.join(OUT_DIR, "mdd_attribute_differences.csv"), index=False)
-print("Saved: mdd_attribute_differences.csv")
+
 
 # --- Plot top-error phonemes by FAR / FRR / DER ---
 plt.figure(figsize=(10,6))
