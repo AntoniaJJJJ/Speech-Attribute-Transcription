@@ -261,7 +261,7 @@ for att in df_p2a.columns:
     }
     attr_summary.append(row)
 
-df_attr = pd.DataFrame(attr_summary).sort_values("Mean_TA", ascending=False)
+df_attr = pd.DataFrame(attr_summary).sort_values("Mean_DER", ascending=False)
 df_attr.to_csv(os.path.join(OUT_DIR, "mdd_attribute_summary.csv"), index=False)
 print("Saved: mdd_attribute_summary.csv")
 
