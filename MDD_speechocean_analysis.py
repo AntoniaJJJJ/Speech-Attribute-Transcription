@@ -42,6 +42,8 @@ from collections import Counter
 from datasets import load_from_disk
 import Levenshtein
 import jiwer.transforms as tr
+import re
+from datasets import load_dataset
 
 # ==================== CONFIG ====================
 
@@ -54,9 +56,56 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 # ==================== LOAD DATA ====================
 
+# --- Load MDD phoneme-level detail and attribute prediction results ---
 df_mdd = pd.read_csv(MDD_DETAIL)
+
 dataset = load_from_disk(RESULTS_DB)
 df_pred = dataset["test"].to_pandas() if "test" in dataset else dataset.to_pandas()
+
+# --- Step 1: Load original SpeechOcean corpus to recover metadata ---
+ds_meta = load_dataset("mispeech/speechocean762")
+
+# Combine both splits (train + test)
+df_meta_train = ds_meta["train"].to_pandas()
+df_meta_test = ds_meta["test"].to_pandas()
+df_meta = pd.concat([df_meta_train, df_meta_test], ignore_index=True)
+
+# Extract unique speaker-level metadata
+df_speaker_meta = df_meta[["speaker", "gender", "age"]].drop_duplicates(subset=["speaker"])
+
+# Save for reuse if desired
+speaker_meta_path = "/srv/scratch/z5369417/speechocean_speaker_metadata.csv"
+os.makedirs(os.path.dirname(speaker_meta_path), exist_ok=True)
+df_speaker_meta.to_csv(speaker_meta_path, index=False)
+
+# --- Step 2: Recover speaker ID from audio filenames in MDD detail ---
+if "audio" in df_mdd.columns:
+    # If the MDD detail has an 'audio' field with filename or JSON string
+    df_mdd["speaker"] = df_mdd["audio"].apply(
+        lambda a: re.findall(r"(\d{4})\d{4,}\.wav", str(a))[0] if re.findall(r"(\d{4})\d{4,}\.wav", str(a)) else None
+    )
+elif "audio_path" in df_mdd.columns:
+    # If audio path is explicitly given
+    df_mdd["speaker"] = df_mdd["audio_path"].apply(
+        lambda x: str(x)[:4] if isinstance(x, str) and len(str(x)) >= 4 else None
+    )
+else:
+    # Fallback: if audio is not available, try to infer later
+    df_mdd["speaker"] = None
+
+# --- Step 3: Merge with speaker metadata ---
+df_all = df_mdd.merge(df_speaker_meta, on="speaker", how="left")
+
+# Handle missing demographics
+if df_all["age"].isna().any():
+    df_all["age"] = df_all["age"].fillna(-1)
+
+if df_all["gender"].isna().any():
+    df_all["gender"] = df_all["gender"].fillna("unknown")
+
+
+# --- Replace main df for analysis ---
+df_mdd = df_all
 df_p2a = pd.read_csv(PHONEME2ATT)
 
 
