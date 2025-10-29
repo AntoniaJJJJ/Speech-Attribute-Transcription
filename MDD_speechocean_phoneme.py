@@ -161,6 +161,7 @@ for s in dataset:
                     global_counts["DE"] += 1; per_op_counts["sub"]["DE"] += 1
 
     sample_rows.append({
+        "text": s.get("text", ""),
         "canonical": s[PHONEME_CANONICAL],
         "spoken": s[PHONEME_SPOKEN],
         "predicted": s[PHONEME_PREDICTED],
