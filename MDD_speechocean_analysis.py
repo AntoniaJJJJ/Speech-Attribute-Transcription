@@ -217,18 +217,17 @@ plt.close()
 
 # ==================== STAGE 3: DEMOGRAPHIC ANALYSIS (on-demand extraction) ====================
 
-# Load metadata only here, when needed
 SPEECHOCEAN_PROCESSED = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4_ipa/"
-try:
-    ds_meta = load_from_disk(SPEECHOCEAN_PROCESSED)
-    df_meta = ds_meta["test"].to_pandas()[["text", "speaker", "gender", "age"]].drop_duplicates()
-except Exception as e:
-    df_meta = pd.DataFrame(columns=["text", "speaker", "gender", "age"])
 
-# Merge demographic info into detailed phoneme dataframe
-df_phoneme_detail = df_phoneme_detail.merge(df_meta, on="text", how="left")
+# Load just the metadata columns from the processed dataset
+ds_meta = load_from_disk(SPEECHOCEAN_PROCESSED)
+df_meta = ds_meta["test"].to_pandas()[["speaker", "gender", "age", "text"]]
 
-# Handle any missing demographics
+# Join metadata with detailed phoneme results via text (if text exists)
+if "text" in df_phoneme_detail.columns:
+    df_phoneme_detail = df_phoneme_detail.merge(df_meta, on="text", how="left")
+
+# Safeguard missing demographics
 df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1)
 df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
 df_phoneme_detail["age_group"] = df_phoneme_detail["age"].astype(str)
