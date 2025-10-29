@@ -221,9 +221,13 @@ def aggregate_demographic(df, group_vars):
     out["DER"] = out["DE"] / (out["CD"] + out["DE"] + 1e-8)
     return out
 
-df_phoneme_detail["age_group"] = df_phoneme_detail["age"].astype(int).astype(str)
+# --- Age groups (no conversion; already in years) ---
+df_phoneme_detail["age_group"] = df_phoneme_detail["age"].fillna(-1).astype(str)
+
+# --- Aggregate by age and gender ---
 df_demo_age = aggregate_demographic(df_phoneme_detail, ["age_group"])
 df_demo_gender = aggregate_demographic(df_phoneme_detail, ["gender"])
+
 df_demo_age.to_csv(os.path.join(OUT_DIR, "mdd_age_summary.csv"), index=False)
 df_demo_gender.to_csv(os.path.join(OUT_DIR, "mdd_gender_summary.csv"), index=False)
 
@@ -231,8 +235,10 @@ plt.figure(figsize=(8,5))
 plt.plot(df_demo_age["age_group"], df_demo_age["FAR"], marker='o', label="FAR")
 plt.plot(df_demo_age["age_group"], df_demo_age["FRR"], marker='o', label="FRR")
 plt.plot(df_demo_age["age_group"], df_demo_age["DER"], marker='o', label="DER")
-plt.legend(); plt.title("Error Rates by Age Group (SpeechOcean)")
-plt.ylabel("Rate"); plt.xlabel("Age Group (years)")
+plt.legend()
+plt.title("Error Rates by Age Group (SpeechOcean)")
+plt.ylabel("Rate")
+plt.xlabel("Age Group (years)")
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "demographic_age_trends.png"))
 plt.close()
@@ -243,8 +249,10 @@ plt.bar(x-0.25, df_demo_gender["FAR"], 0.25, label="FAR")
 plt.bar(x,      df_demo_gender["FRR"], 0.25, label="FRR")
 plt.bar(x+0.25, df_demo_gender["DER"], 0.25, label="DER")
 plt.xticks(x, df_demo_gender["gender"])
-plt.ylabel("Rate"); plt.title("Error Rates by Gender (SpeechOcean)")
-plt.legend(); plt.tight_layout()
+plt.ylabel("Rate")
+plt.title("Error Rates by Gender (SpeechOcean)")
+plt.legend()
+plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "demographic_gender_trends.png"))
 plt.close()
 
