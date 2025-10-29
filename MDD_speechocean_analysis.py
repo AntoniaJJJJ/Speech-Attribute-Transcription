@@ -231,6 +231,8 @@ def aggregate_demographic(df, group_vars):
     return out
 
 df_demo_age = aggregate_demographic(df_phoneme_detail, ["age_group"])
+df_demo_age["age_group"] = df_demo_age["age_group"].astype(int)
+df_demo_age = df_demo_age.sort_values("age_group")
 df_demo_gender = aggregate_demographic(df_phoneme_detail, ["gender"])
 
 # Save summaries
