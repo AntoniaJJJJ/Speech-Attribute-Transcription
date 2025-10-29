@@ -56,56 +56,9 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 # ==================== LOAD DATA ====================
 
-# --- Load MDD phoneme-level detail and attribute prediction results ---
 df_mdd = pd.read_csv(MDD_DETAIL)
-
 dataset = load_from_disk(RESULTS_DB)
 df_pred = dataset["test"].to_pandas() if "test" in dataset else dataset.to_pandas()
-
-# --- Step 1: Load original SpeechOcean corpus to recover metadata ---
-ds_meta = load_dataset("mispeech/speechocean762")
-
-# Combine both splits (train + test)
-df_meta_train = ds_meta["train"].to_pandas()
-df_meta_test = ds_meta["test"].to_pandas()
-df_meta = pd.concat([df_meta_train, df_meta_test], ignore_index=True)
-
-# Extract unique speaker-level metadata
-df_speaker_meta = df_meta[["speaker", "gender", "age"]].drop_duplicates(subset=["speaker"])
-
-# Save for reuse if desired
-speaker_meta_path = "/srv/scratch/z5369417/speechocean_speaker_metadata.csv"
-os.makedirs(os.path.dirname(speaker_meta_path), exist_ok=True)
-df_speaker_meta.to_csv(speaker_meta_path, index=False)
-
-# --- Step 2: Recover speaker ID from audio filenames in MDD detail ---
-if "audio" in df_mdd.columns:
-    # If the MDD detail has an 'audio' field with filename or JSON string
-    df_mdd["speaker"] = df_mdd["audio"].apply(
-        lambda a: re.findall(r"(\d{4})\d{4,}\.wav", str(a))[0] if re.findall(r"(\d{4})\d{4,}\.wav", str(a)) else None
-    )
-elif "audio_path" in df_mdd.columns:
-    # If audio path is explicitly given
-    df_mdd["speaker"] = df_mdd["audio_path"].apply(
-        lambda x: str(x)[:4] if isinstance(x, str) and len(str(x)) >= 4 else None
-    )
-else:
-    # Fallback: if audio is not available, try to infer later
-    df_mdd["speaker"] = None
-
-# --- Step 3: Merge with speaker metadata ---
-df_all = df_mdd.merge(df_speaker_meta, on="speaker", how="left")
-
-# Handle missing demographics
-if df_all["age"].isna().any():
-    df_all["age"] = df_all["age"].fillna(-1)
-
-if df_all["gender"].isna().any():
-    df_all["gender"] = df_all["gender"].fillna("unknown")
-
-
-# --- Replace main df for analysis ---
-df_mdd = df_all
 df_p2a = pd.read_csv(PHONEME2ATT)
 
 
@@ -262,6 +215,25 @@ plt.close()
 
 # ==================== STAGE 3: DEMOGRAPHIC ANALYSIS ====================
 
+# ==================== STAGE 3: DEMOGRAPHIC ANALYSIS (on-demand extraction) ====================
+
+# Load metadata only here, when needed
+SPEECHOCEAN_PROCESSED = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4_ipa/"
+try:
+    ds_meta = load_from_disk(SPEECHOCEAN_PROCESSED)
+    df_meta = ds_meta["test"].to_pandas()[["text", "speaker", "gender", "age"]].drop_duplicates()
+except Exception as e:
+    df_meta = pd.DataFrame(columns=["text", "speaker", "gender", "age"])
+
+# Merge demographic info into detailed phoneme dataframe
+df_phoneme_detail = df_phoneme_detail.merge(df_meta, on="text", how="left")
+
+# Handle any missing demographics
+df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1)
+df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
+df_phoneme_detail["age_group"] = df_phoneme_detail["age"].astype(str)
+
+# --- Aggregate metrics by age group and gender ---
 def aggregate_demographic(df, group_vars):
     metrics = ["TA", "FR", "FA", "TR", "CD", "DE"]
     out = df.groupby(group_vars)[metrics].sum().reset_index()
@@ -270,16 +242,14 @@ def aggregate_demographic(df, group_vars):
     out["DER"] = out["DE"] / (out["CD"] + out["DE"] + 1e-8)
     return out
 
-# --- Age groups (no conversion; already in years) ---
-df_phoneme_detail["age_group"] = df_phoneme_detail["age"].fillna(-1).astype(str)
-
-# --- Aggregate by age and gender ---
 df_demo_age = aggregate_demographic(df_phoneme_detail, ["age_group"])
 df_demo_gender = aggregate_demographic(df_phoneme_detail, ["gender"])
 
+# Save summaries
 df_demo_age.to_csv(os.path.join(OUT_DIR, "mdd_age_summary.csv"), index=False)
 df_demo_gender.to_csv(os.path.join(OUT_DIR, "mdd_gender_summary.csv"), index=False)
 
+# --- Plot error-rate trends by age ---
 plt.figure(figsize=(8,5))
 plt.plot(df_demo_age["age_group"], df_demo_age["FAR"], marker='o', label="FAR")
 plt.plot(df_demo_age["age_group"], df_demo_age["FRR"], marker='o', label="FRR")
@@ -292,6 +262,7 @@ plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "demographic_age_trends.png"))
 plt.close()
 
+# --- Plot error-rate comparison by gender ---
 plt.figure(figsize=(6,5))
 x = np.arange(len(df_demo_gender["gender"]))
 plt.bar(x-0.25, df_demo_gender["FAR"], 0.25, label="FAR")
@@ -304,6 +275,7 @@ plt.legend()
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "demographic_gender_trends.png"))
 plt.close()
+
 
 # ==================== STAGE 4: ATTRIBUTE DIFFERENCE ANALYSIS ====================
 
