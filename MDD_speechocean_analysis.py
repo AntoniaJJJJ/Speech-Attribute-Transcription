@@ -139,11 +139,7 @@ for _, sample in df_mdd.iterrows():
                 record["TR"] = 1
                 record["CD" if pred_ph == spo_ph else "DE"] = 1
 
-        record.update({
-            "text": sample.get("text", ""),
-            "age": sample.get("age", np.nan),
-            "gender": sample.get("gender", np.nan)
-        })
+        record["text"] = sample.get("text", "")
         all_records.append(record)
 
 df_phoneme_detail = pd.DataFrame(all_records)
@@ -214,18 +210,11 @@ plt.savefig(os.path.join(OUT_DIR, "attribute_error_rates.png"))
 plt.close()
 
 # ==================== STAGE 3: DEMOGRAPHIC ANALYSIS ====================
+# Get age/gender from df_pred and merge via 'text'
+df_meta = df_pred[["text", "age", "gender"]].drop_duplicates()
 
-# ==================== STAGE 3: DEMOGRAPHIC ANALYSIS (on-demand extraction) ====================
-
-SPEECHOCEAN_PROCESSED = "/srv/scratch/z5369417/outputs/phonemization_speechocean_exp11_4_ipa/"
-
-# Load just the metadata columns from the processed dataset
-ds_meta = load_from_disk(SPEECHOCEAN_PROCESSED)
-df_meta = ds_meta["test"].to_pandas()[["speaker", "gender", "age", "text"]]
-
-# Join metadata with detailed phoneme results via text (if text exists)
-if "text" in df_phoneme_detail.columns:
-    df_phoneme_detail = df_phoneme_detail.merge(df_meta, on="text", how="left")
+# Join metadata with detailed phoneme results
+df_phoneme_detail = df_phoneme_detail.merge(df_meta, on="text", how="left")
 
 # Safeguard missing demographics
 df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1)
