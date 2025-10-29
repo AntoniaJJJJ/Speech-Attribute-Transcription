@@ -192,7 +192,7 @@ pd.DataFrame.from_dict(edit_ops, orient="index", columns=["count"]).to_csv(
 
 # 4. Per-operation performance table
 edit_ops_perf_df = pd.DataFrame(per_op_counts).T.fillna(0).astype(int)
-edit_ops_perf_df = edit_ops_perf_df[["TA","FR","TR","FA","CD","DE"]]  # consistent column order
+edit_ops_perf_df = edit_ops_perf_df.reindex(columns=["TA","FR","TR","FA","CD","DE"], fill_value=0) # consistent column order
 edit_ops_perf_df.to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"))
 
 print(f"SpeechOcean MDD complete.\nResults saved in:\n  {OUT_DIR}")
