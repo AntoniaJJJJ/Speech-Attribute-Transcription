@@ -79,22 +79,11 @@ data = []
 # === Load each row into dict with audio data ===  
 for _, row in df.iterrows():
 
-    # Clean spoken phonemes: remove symbols like ?, *, ., etc.
-    spoken_raw = str(row["actual_spoken_phonemes"]).strip()
-
-    # remove ONLY punctuation chars that appear in dataset (no regex, no mutation)
-    for ch in ["?", "*"]:
-        spoken_raw = spoken_raw.replace(ch, "")
-
-    # collapse spaces
-    cleaned_spoken = " ".join(spoken_raw.split())
-
-
     data.append({
         "audio": row["wav_path"],
         "text": row["phoneme_unsw"],  #  Canonical transcription
         "phoneme_unsw": row["phoneme_unsw"],
-        "actual_spoken_phonemes": cleaned_spoken,
+        "actual_spoken_phonemes":  row["actual_spoken_phonemes"],
         "aligned_phonemes": row["aligned_phonemes"],
         "word": row["word"],
         "age": row["age"],
