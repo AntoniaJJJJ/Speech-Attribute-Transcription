@@ -5,7 +5,7 @@ from datasets import load_from_disk
 # === Paths ===
 MAP_FILE = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_Diph_v1.csv"
 INPUT_DATASET = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped/"
-OUTPUT_DATASET = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped_ipa_filtered/"
+OUTPUT_DATASET = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped_ipa/"
 
 # === Only these columns are checked ===
 PHONEME_COLUMNS = ["phoneme_unsw", "actual_spoken_phonemes"]
