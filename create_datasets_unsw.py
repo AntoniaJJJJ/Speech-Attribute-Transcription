@@ -89,7 +89,7 @@ for _, row in df.iterrows():
         "audio": row["wav_path"],
         "text": row["phoneme_unsw"],  #  Canonical transcription
         "phoneme_unsw": row["phoneme_unsw"],
-        "actual_spoken_phonemes": row["actual_spoken_phonemes"],
+        "actual_spoken_phonemes": cleaned_spoken,
         "aligned_phonemes": row["aligned_phonemes"],
         "word": row["word"],
         "age": row["age"],
