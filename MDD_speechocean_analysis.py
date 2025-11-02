@@ -47,10 +47,10 @@ from datasets import load_dataset
 
 # ==================== CONFIG ====================
 
-RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_4/results_speechocean_test.db"
-MDD_DETAIL = "/srv/scratch/z5369417/outputs/mdd_speechocean_phoneme_level_exp11/mdd_sample_detail.csv"
-PHONEME2ATT = "data/p2att_en_us-arpa_noDiph_camb.csv"
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_speechocean_analysis_exp11"
+RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp22/exp22_3/results_speechocean_test.db"
+MDD_DETAIL = "/srv/scratch/z5369417/outputs/mdd_speechocean_phoneme_level_exp22/mdd_sample_detail.csv"
+PHONEME2ATT = "data/p2att_combined_us_au_ipa_Diph_voiced1vowels.csv"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_speechocean_analysis_exp22"
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
