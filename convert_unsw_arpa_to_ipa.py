@@ -3,21 +3,28 @@ import pandas as pd
 from datasets import load_from_disk
 
 # === Paths ===
-MAP_FILE = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_Diph_v1.csv"
+MAP_FILE_MAIN = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_Diph_v1.csv"
+MAP_FILE_FALLBACK = "/srv/scratch/z5369417/Speech-Attribute-Transcription/data/Phoneme2att_camb_att_noDiph.csv"
 INPUT_DATASET = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped/"
 OUTPUT_DATASET = "/srv/scratch/z5369417/outputs/phonemization_unsw_wrapped_ipa/"
 
 # === Columns containing phoneme strings ===
 PHONEME_COLUMNS = ["text", "phoneme_unsw", "actual_spoken_phonemes", "aligned_phonemes"]
 
-def load_arpa_to_ipa_map(map_file):
-    """Load ARPA→IPA mapping from the CSV file."""
-    df = pd.read_csv(map_file)
-    df["Phoneme_arpa"] = df["Phoneme_arpa"].astype(str).str.strip().str.lower()
-    df["Phoneme_ipa"] = df["Phoneme_ipa"].astype(str).str.strip()
-    mapping = dict(zip(df["Phoneme_arpa"], df["Phoneme_ipa"]))
-    print(f"Loaded {len(mapping)} ARPA→IPA mappings.")
-    return mapping
+def load_arpa_to_ipa_map(*csv_files):
+    """Load and combine ARPA→IPA mappings from multiple CSV files."""
+    combined = {}
+    total = 0
+    for path in csv_files:
+        df = pd.read_csv(path)
+        df["Phoneme_arpa"] = df["Phoneme_arpa"].astype(str).str.strip().str.lower()
+        df["Phoneme_ipa"] = df["Phoneme_ipa"].astype(str).str.strip()
+        new_map = dict(zip(df["Phoneme_arpa"], df["Phoneme_ipa"]))
+        print(f"Loaded {len(new_map)} mappings from: {os.path.basename(path)}")
+        combined.update(new_map)
+        total += len(new_map)
+    print(f"Total combined mappings: {len(combined)} (with fallback)")
+    return combined
 
 def convert_sequence(seq, mapping):
     """Convert a space-separated or list-based ARPA phoneme sequence into IPA."""
@@ -51,5 +58,5 @@ def process_dataset(input_path, output_path, mapping):
     ds.save_to_disk(output_path)
 
 if __name__ == "__main__":
-    mapping = load_arpa_to_ipa_map(MAP_FILE)
-    process_dataset(INPUT_DATASET, OUTPUT_DATASET, mapping)
+    mapping_combined = load_arpa_to_ipa_map(MAP_FILE_MAIN, MAP_FILE_FALLBACK)
+    process_dataset(INPUT_DATASET, OUTPUT_DATASET, mapping_combined)
