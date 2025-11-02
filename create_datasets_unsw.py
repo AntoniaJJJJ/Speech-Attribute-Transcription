@@ -80,10 +80,14 @@ data = []
 for _, row in df.iterrows():
 
     # Clean spoken phonemes: remove symbols like ?, *, ., etc.
-    cleaned_spoken = " ".join(
-        c for c in (re.sub(r"[^A-Za-z0-9]", "", p) for p in str(row["actual_spoken_phonemes"]).strip().split())
-        if c
-    )
+    spoken_raw = str(row["actual_spoken_phonemes"]).strip()
+
+    # remove ONLY punctuation chars that appear in dataset (no regex, no mutation)
+    for ch in ["?", "*"]:
+        spoken_raw = spoken_raw.replace(ch, "")
+
+    # collapse spaces
+    cleaned_spoken = " ".join(spoken_raw.split())
 
 
     data.append({
