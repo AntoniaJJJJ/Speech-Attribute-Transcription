@@ -38,6 +38,7 @@ import os
 import pandas as pd
 from datasets import Dataset, DatasetDict, Audio
 import numpy as np
+import re
 
 # === PATH SETUP ===
 base_dir = "/srv/scratch/z5369417/UNSW_final_deliverables/CAAP_2023-04-27"
@@ -77,6 +78,13 @@ data = []
 
 # === Load each row into dict with audio data ===  
 for _, row in df.iterrows():
+
+    # Clean spoken phonemes: remove symbols like ?, *, ., etc.
+    cleaned_spoken = " ".join([
+        re.sub(r"[^\wɑɒæʌəɛɜɪiːɔʃθðŋʒʊuː]", "", p)
+        for p in str(row["actual_spoken_phonemes"]).split()
+    ])
+
     data.append({
         "audio": row["wav_path"],
         "text": row["phoneme_unsw"],  #  Canonical transcription
