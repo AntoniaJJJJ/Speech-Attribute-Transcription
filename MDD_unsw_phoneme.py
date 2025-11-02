@@ -29,14 +29,14 @@ import Levenshtein
 
 # ==================== CONFIG ====================
 
-PREDICTED_DATASET = "/srv/scratch/z5369417/outputs/transcriber_result/combined_model_exp22_test_on_unsw"
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp22"
+PREDICTED_DATASET = "/srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_unsw"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp11"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 PHONEME_CANONICAL = "phoneme_unsw"
 PHONEME_SPOKEN = "actual_spoken_phonemes"
 PHONEME_PREDICTED = "pred_phoneme"
-DECOUPLE_DIPH = False
+DECOUPLE_DIPH = True
 DIPHTHONG_MAP_FILE = "data/Diphthongs_en_us-arpa.csv"
 
 # ==================== HELPERS ====================
