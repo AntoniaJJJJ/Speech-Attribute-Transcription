@@ -245,7 +245,12 @@ for sample in dataset:
 
 # convert to DataFrame (rows = ops, cols = metrics)
 edit_ops_perf_df = pd.DataFrame(per_op_counts).T.fillna(0).astype(int)
-edit_ops_perf_df = edit_ops_perf_df[["TA", "FR", "TR", "FA", "CD", "DE"]]  # ordered columns
+# Ensure all expected columns exist, fill missing ones with 0
+for col in ["TA", "FR", "TR", "FA", "CD", "DE"]:
+    if col not in edit_ops_perf_df.columns:
+        edit_ops_perf_df[col] = 0
+
+edit_ops_perf_df = edit_ops_perf_df[["TA", "FR", "TR", "FA", "CD", "DE"]]
 
 # save to CSV
 edit_ops_perf_path = os.path.join(OUT_DIR, "edit_ops_performance.csv")
