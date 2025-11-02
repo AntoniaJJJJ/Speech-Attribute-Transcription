@@ -80,12 +80,10 @@ data = []
 for _, row in df.iterrows():
 
     # Clean spoken phonemes: remove symbols like ?, *, ., etc.
-    spoken_raw = str(row["actual_spoken_phonemes"]).strip()
-    cleaned_spoken = " ".join([
-        re.sub(r"[^A-Za-z0-9]", "", p)   # remove non-alphanumeric chars from each phoneme token
-        for p in spoken_raw.split()
-        if re.sub(r"[^A-Za-z0-9]", "", p) != ""   # drop empty tokens after cleaning
-    ])
+    cleaned_spoken = " ".join(
+        c for c in (re.sub(r"[^A-Za-z0-9]", "", p) for p in str(row["actual_spoken_phonemes"]).strip().split())
+        if c
+    )
 
 
     data.append({
