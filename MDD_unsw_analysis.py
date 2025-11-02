@@ -42,11 +42,11 @@ from collections import Counter
 
 # ==================== CONFIG ====================
 
-RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp22/exp22_2/results_unsw_test.db"
-MDD_DETAIL = "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp22/mdd_sample_detail.csv"
+RESULTS_DB = "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db"
+MDD_DETAIL = "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp11/mdd_sample_detail.csv"
 UNSW_META  = "/srv/scratch/z5369417/UNSW_final_deliverables/CAAP_2023-04-27/dataset_spreadsheet.xlsx"
-PHONEME2ATT = "data/p2att_combined_us_au_ipa_Diph_voiced1vowels.csv"
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_analysis_exp22"
+PHONEME2ATT = "data/p2att_en_us-arpa_noDiph.csv"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_analysis_exp11"
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
