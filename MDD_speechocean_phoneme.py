@@ -163,7 +163,7 @@ for sample in dataset:
                     global_counts["DE"] += 1
 
     sample_rows.append({
-        "word": sample["word"],
+        "word": sample["text"],
         "canonical": sample[PHONEME_CANONICAL],
         "spoken": sample[PHONEME_SPOKEN],
         "predicted": sample[PHONEME_PREDICTED],
