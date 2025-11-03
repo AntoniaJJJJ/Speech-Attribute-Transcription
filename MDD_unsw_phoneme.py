@@ -155,16 +155,13 @@ def align_lists(ref, hyp):
     """
     # Build shared symbol table
     vocab = list(set(ref + hyp))
-    char_map = {p: chr(i + 33) for i, p in enumerate(vocab)}  # avoid null/space chars
-    
+    char_map = {p: chr(i + 33) for i, p in enumerate(vocab)}
     ref_str = "".join(char_map[p] for p in ref)
     hyp_str = "".join(char_map[p] for p in hyp)
-
     ops = Levenshtein.editops(ref_str, hyp_str)
 
     aligned = []
     r_i = h_i = 0
-
     for op, i1, i2 in ops:
         while r_i < i1 and h_i < i2:
             aligned.append((ref[r_i], hyp[h_i]))
@@ -180,8 +177,6 @@ def align_lists(ref, hyp):
             aligned.append((ref[r_i], hyp[h_i]))
             r_i += 1
             h_i += 1
-
-    # tail fill
     while r_i < len(ref) and h_i < len(hyp):
         aligned.append((ref[r_i], hyp[h_i]))
         r_i += 1
@@ -192,7 +187,6 @@ def align_lists(ref, hyp):
     while h_i < len(hyp):
         aligned.append(("", hyp[h_i]))
         h_i += 1
-
     return aligned
 
 for sample in dataset:
@@ -200,40 +194,34 @@ for sample in dataset:
     spoken = decouple_diphthongs(sample[PHONEME_SPOKEN], diph_map, decouple=DECOUPLE_DIPH)
     predicted = decouple_diphthongs(sample[PHONEME_PREDICTED], diph_map, decouple=DECOUPLE_DIPH)
 
-    # FIX: one alignment defines the timeline
     align_truth = align_lists(canonical, spoken)
     align_pred  = align_lists(canonical, predicted)
 
-    # pad to match lengths
     max_len = max(len(align_truth), len(align_pred))
     align_truth += [("", "")] * (max_len - len(align_truth))
     align_pred  += [("", "")] * (max_len - len(align_pred))
 
     for (can_ph, spo_ph), (_, pred_ph) in zip(align_truth, align_pred):
-
         if can_ph == "" and spo_ph != "":
-            # insertion
+            # Insertion error
             edit_ops["ins"] += 1
             global_counts["TR"] += 1
             global_counts["CD" if pred_ph == spo_ph else "DE"] += 1
-
         elif can_ph != "" and spo_ph == "":
-            # deletion
+            # Deletion error
             edit_ops["del"] += 1
             global_counts["TR"] += 1
             global_counts["CD" if pred_ph == "" else "DE"] += 1
-
         elif can_ph == spo_ph:
-            # canonical correct phone
+            # Correct pronunciation
             if pred_ph == can_ph:
                 edit_ops["match"] += 1
                 global_counts["TA"] += 1
             else:
                 edit_ops["sub"] += 1
                 global_counts["FR"] += 1
-
         else:
-            # canonical mispronounced
+            # Mispronunciation (substitution)
             edit_ops["sub"] += 1
             global_counts["TR"] += 1
             if pred_ph == spo_ph:
@@ -273,30 +261,43 @@ for sample in dataset:
     align_pred  += [("", "")] * (max_len - len(align_pred))
 
     for (can_ph, spo_ph), (_, pred_ph) in zip(align_truth, align_pred):
-
-        # determine op type exactly as editops semantic
         if can_ph == "" and spo_ph != "":
+            # INSERTION error (spoken has extra phoneme)
             op = "ins"
             per_op_counts[op]["TR"] += 1
-            per_op_counts[op]["CD" if pred_ph == spo_ph else "DE"] += 1
+            if pred_ph == spo_ph:
+                per_op_counts[op]["CD"] += 1  # Correctly diagnosed insertion
+            else:
+                per_op_counts[op]["DE"] += 1  # Misdiagnosed insertion
 
         elif can_ph != "" and spo_ph == "":
+            # DELETION error (spoken omitted a phoneme)
             op = "del"
             per_op_counts[op]["TR"] += 1
-            per_op_counts[op]["CD" if pred_ph == "" else "DE"] += 1
+            if pred_ph == "":
+                per_op_counts[op]["CD"] += 1  # Correctly diagnosed deletion (model didn't hallucinate)
+            else:
+                per_op_counts[op]["DE"] += 1  # Model inserted phoneme incorrectly
 
         elif can_ph == spo_ph:
+            # MATCH (correct pronunciation)
             op = "match"
-            per_op_counts[op]["TA" if pred_ph == can_ph else "FA"] += 1
+            if pred_ph == can_ph:
+                per_op_counts[op]["TA"] += 1  # Correctly accepted
+            else:
+                per_op_counts[op]["FR"] += 1  # Wrongly rejected correct
 
         else:
+            # SUBSTITUTION (spoken phoneme != canonical)
             op = "sub"
-            if pred_ph == spo_ph:
-                per_op_counts[op]["CD"] += 1
-                per_op_counts[op]["TR"] += 1
+            if pred_ph == can_ph:
+                per_op_counts[op]["FA"] += 1  # Wrongly accepted mispronunciation
             else:
-                per_op_counts[op]["DE"] += 1
-                per_op_counts[op]["TR"] += 1
+                per_op_counts[op]["TR"] += 1  # Truly rejected
+                if pred_ph == spo_ph:
+                    per_op_counts[op]["CD"] += 1  # Correct diagnosis
+                else:
+                    per_op_counts[op]["DE"] += 1  # Diagnosis error
 
 # convert to DataFrame (rows = ops, cols = metrics)
 edit_ops_perf_df = pd.DataFrame(per_op_counts).T.fillna(0).astype(int)
