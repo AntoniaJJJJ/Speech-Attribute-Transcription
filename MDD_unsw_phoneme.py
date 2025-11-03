@@ -223,11 +223,14 @@ for sample in dataset:
         else:
             # Mispronunciation (substitution)
             edit_ops["sub"] += 1
-            global_counts["TR"] += 1
-            if pred_ph == spo_ph:
-                global_counts["CD"] += 1
+            if pred_ph == can_ph:
+                global_counts["FA"] += 1
             else:
-                global_counts["DE"] += 1
+                global_counts["TR"] += 1
+                if pred_ph == spo_ph:
+                    global_counts["CD"] += 1
+                else:
+                    global_counts["DE"] += 1
 
     sample_rows.append({
         "word": sample["word"],
