@@ -96,50 +96,35 @@ from collections import Counter
 import Levenshtein
 import jiwer.transforms as tr
 
-# alignment utilities (from script 4)
-_default_transform = tr.Compose([
-    tr.RemoveMultipleSpaces(),
-    tr.Strip(),
-    tr.ReduceToSingleSentence(),
-    tr.ReduceToListOfListOfWords(),
-])
+def align_lists(ref, hyp):
+    vocab = list(set(ref + hyp))
+    char_map = {p: chr(i + 33) for i, p in enumerate(vocab)}
+    ref_str = "".join(char_map[p] for p in ref)
+    hyp_str = "".join(char_map[p] for p in hyp)
+    ops = Levenshtein.editops(ref_str, hyp_str)
 
-def preprocess_for_alignment(ref_str, pred_str):
-    truth = _default_transform(ref_str)
-    hypothesis = _default_transform(pred_str)
-    assert len(truth) == 1 and len(hypothesis) == 1
-    truth, hypothesis = truth[0], hypothesis[0]
-    mapper = dict([(k, v) for v, k in enumerate(set(truth + hypothesis))])
-    truth_chars = [chr(mapper[p]) for p in truth]
-    pred_chars = [chr(mapper[p]) for p in hypothesis]
-    return truth, hypothesis, "".join(truth_chars), "".join(pred_chars)
-
-def align_like_cm(ref_phonemes, pred_phonemes):
-    ref_str = " ".join(ref_phonemes)
-    pred_str = " ".join(pred_phonemes)
-    ref_list, pred_list, ref_chars, pred_chars = preprocess_for_alignment(ref_str, pred_str)
-    ops = Levenshtein.editops(ref_chars, pred_chars)
-    aligned_pairs = []
-    ref_i, pred_i = 0, 0
+    aligned = []
+    r_i = h_i = 0
     for op, i1, i2 in ops:
-        while ref_i < i1 and pred_i < i2:
-            aligned_pairs.append((ref_list[ref_i], pred_list[pred_i]))
-            ref_i += 1
-            pred_i += 1
+        while r_i < i1 and h_i < i2:
+            aligned.append((ref[r_i], hyp[h_i]))
+            r_i += 1; h_i += 1
         if op == "insert":
-            aligned_pairs.append(("", pred_list[i2])); pred_i += 1
+            aligned.append(("", hyp[h_i])); h_i += 1
         elif op == "delete":
-            aligned_pairs.append((ref_list[i1], "")); ref_i += 1
-        elif op == "replace":
-            aligned_pairs.append((ref_list[i1], pred_list[i2])); ref_i += 1; pred_i += 1
-    while ref_i < len(ref_list) and pred_i < len(pred_list):
-        aligned_pairs.append((ref_list[ref_i], pred_list[pred_i]))
-        ref_i += 1; pred_i += 1
-    while ref_i < len(ref_list):
-        aligned_pairs.append((ref_list[ref_i], "")); ref_i += 1
-    while pred_i < len(pred_list):
-        aligned_pairs.append(("", pred_list[pred_i])); pred_i += 1
-    return aligned_pairs
+            aligned.append((ref[r_i], "")); r_i += 1
+        else:
+            aligned.append((ref[r_i], hyp[h_i]))
+            r_i += 1; h_i += 1
+
+    while r_i < len(ref) and h_i < len(hyp):
+        aligned.append((ref[r_i], hyp[h_i])); r_i += 1; h_i += 1
+    while r_i < len(ref):
+        aligned.append((ref[r_i], "")); r_i += 1
+    while h_i < len(hyp):
+        aligned.append(("", hyp[h_i])); h_i += 1
+
+    return aligned
 
 
 # --- Load datasets ---
@@ -164,10 +149,10 @@ for _, sample in df_all.iterrows():
     spo = str(sample.get("spoken", "") or "").split()
     pred = str(sample.get("predicted", "") or "").split()
 
-    align_can = align_like_cm(can, pred)
-    align_spo = align_like_cm(spo, pred)
+    align_truth = align_lists(can, spo)
+    align_pred  = align_lists(can, pred)
 
-    for (can_ph, pred_ph), (_, spo_ph) in zip(align_can, align_spo):
+    for (can_ph, spo_ph), (_, pred_ph) in zip(align_truth, align_pred):
         record = {
             "canonical": can_ph,
             "predicted": pred_ph,
@@ -176,20 +161,27 @@ for _, sample in df_all.iterrows():
         }
 
         # --- classification (same logic as MDD script) ---
-        if can_ph == '' and pred_ph != '':
+        if can_ph == "" and spo_ph != "":
+            # ins
             record["TR"] = 1
             record["CD" if pred_ph == spo_ph else "DE"] = 1
-        elif can_ph != '' and pred_ph == '':
+
+        elif can_ph != "" and spo_ph == "":
+            # del
             record["TR"] = 1
-            record["CD" if spo_ph == '' else "DE"] = 1
-        elif can_ph == pred_ph:
-            if can_ph == spo_ph:
+            record["CD" if pred_ph == "" else "DE"] = 1
+
+        elif can_ph == spo_ph:
+            # match
+            if pred_ph == can_ph:
                 record["TA"] = 1
             else:
-                record["FA"] = 1
-        else:
-            if can_ph == spo_ph:
                 record["FR"] = 1
+
+        else:
+            # sub
+            if pred_ph == can_ph:
+                record["FA"] = 1
             else:
                 record["TR"] = 1
                 record["CD" if pred_ph == spo_ph else "DE"] = 1
