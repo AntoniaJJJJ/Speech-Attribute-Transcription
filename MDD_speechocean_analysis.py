@@ -63,49 +63,39 @@ df_p2a = pd.read_csv(PHONEME2ATT)
 
 
 # ==================== STAGE 1: PHONEME-LEVEL SUMMARY ====================
+from collections import Counter
+import Levenshtein
+import jiwer.transforms as tr
 
-_default_transform = tr.Compose([
-    tr.RemoveMultipleSpaces(),
-    tr.Strip(),
-    tr.ReduceToSingleSentence(),
-    tr.ReduceToListOfListOfWords(),
-])
+def align_lists(ref, hyp):
+    vocab = list(set(ref + hyp))
+    char_map = {p: chr(i + 33) for i, p in enumerate(vocab)}
+    ref_str = "".join(char_map[p] for p in ref)
+    hyp_str = "".join(char_map[p] for p in hyp)
+    ops = Levenshtein.editops(ref_str, hyp_str)
 
-def preprocess_for_alignment(ref_str, pred_str):
-    truth = _default_transform(ref_str)
-    hypothesis = _default_transform(pred_str)
-    assert len(truth) == 1 and len(hypothesis) == 1
-    truth, hypothesis = truth[0], hypothesis[0]
-    mapper = dict([(k, v) for v, k in enumerate(set(truth + hypothesis))])
-    truth_chars = [chr(mapper[p]) for p in truth]
-    pred_chars = [chr(mapper[p]) for p in hypothesis]
-    return truth, hypothesis, "".join(truth_chars), "".join(pred_chars)
-
-def align_like_cm(ref_phonemes, pred_phonemes):
-    ref_str = " ".join(ref_phonemes)
-    pred_str = " ".join(pred_phonemes)
-    ref_list, pred_list, ref_chars, pred_chars = preprocess_for_alignment(ref_str, pred_str)
-    ops = Levenshtein.editops(ref_chars, pred_chars)
-    aligned_pairs = []
-    ref_i, pred_i = 0, 0
+    aligned = []
+    r_i = h_i = 0
     for op, i1, i2 in ops:
-        while ref_i < i1 and pred_i < i2:
-            aligned_pairs.append((ref_list[ref_i], pred_list[pred_i]))
-            ref_i += 1; pred_i += 1
+        while r_i < i1 and h_i < i2:
+            aligned.append((ref[r_i], hyp[h_i]))
+            r_i += 1; h_i += 1
         if op == "insert":
-            aligned_pairs.append(("", pred_list[i2])); pred_i += 1
+            aligned.append(("", hyp[h_i])); h_i += 1
         elif op == "delete":
-            aligned_pairs.append((ref_list[i1], "")); ref_i += 1
-        elif op == "replace":
-            aligned_pairs.append((ref_list[i1], pred_list[i2])); ref_i += 1; pred_i += 1
-    while ref_i < len(ref_list) and pred_i < len(pred_list):
-        aligned_pairs.append((ref_list[ref_i], pred_list[pred_i]))
-        ref_i += 1; pred_i += 1
-    while ref_i < len(ref_list):
-        aligned_pairs.append((ref_list[ref_i], "")); ref_i += 1
-    while pred_i < len(pred_list):
-        aligned_pairs.append(("", pred_list[pred_i])); pred_i += 1
-    return aligned_pairs
+            aligned.append((ref[r_i], "")); r_i += 1
+        else:
+            aligned.append((ref[r_i], hyp[h_i]))
+            r_i += 1; h_i += 1
+
+    while r_i < len(ref) and h_i < len(hyp):
+        aligned.append((ref[r_i], hyp[h_i])); r_i += 1; h_i += 1
+    while r_i < len(ref):
+        aligned.append((ref[r_i], "")); r_i += 1
+    while h_i < len(hyp):
+        aligned.append(("", hyp[h_i])); h_i += 1
+
+    return aligned
 
 all_records = []
 
@@ -114,27 +104,34 @@ for _, sample in df_mdd.iterrows():
     spo = str(sample.get("spoken", "") or "").split()
     pred = str(sample.get("predicted", "") or "").split()
 
-    align_can = align_like_cm(can, pred)
-    align_spo = align_like_cm(spo, pred)
+    align_truth = align_lists(can, spo)
+    align_pred  = align_lists(can, pred)
 
-    for (can_ph, pred_ph), (_, spo_ph) in zip(align_can, align_spo):
+    for (can_ph, spo_ph), (_, pred_ph) in zip(align_truth, align_pred):
         record = {"canonical": can_ph, "predicted": pred_ph, "spoken": spo_ph,
                   "TA": 0, "FR": 0, "FA": 0, "TR": 0, "CD": 0, "DE": 0}
 
-        if can_ph == '' and pred_ph != '':
+        if can_ph == "" and spo_ph != "":
+            # INSERTION
             record["TR"] = 1
             record["CD" if pred_ph == spo_ph else "DE"] = 1
-        elif can_ph != '' and pred_ph == '':
+
+        elif can_ph != "" and spo_ph == "":
+            # DELETION
             record["TR"] = 1
-            record["CD" if spo_ph == '' else "DE"] = 1
-        elif can_ph == pred_ph:
-            if can_ph == spo_ph:
+            record["CD" if pred_ph == "" else "DE"] = 1
+
+        elif can_ph == spo_ph:
+            # CORRECT PRONUNCIATION
+            if pred_ph == can_ph:
                 record["TA"] = 1
             else:
-                record["FA"] = 1
-        else:
-            if can_ph == spo_ph:
                 record["FR"] = 1
+
+        else:
+            # MISPRONUNCIATION (SUBSTITUTION)
+            if pred_ph == can_ph:
+                record["FA"] = 1
             else:
                 record["TR"] = 1
                 record["CD" if pred_ph == spo_ph else "DE"] = 1
@@ -347,4 +344,73 @@ for metric, df_sort, color in [("FAR", df_far_sorted, "tab:red"),
     plt.savefig(os.path.join(OUT_DIR, f"top_phonemes_{metric}.png"))
     plt.close()
 
-print("Completed: SpeechOcean MDD analysis (phoneme, attribute, demographics, differences)")
+# --- Plot per-attribute flip counts in high-error phonemes ---
+from matplotlib.cm import get_cmap
+
+# Accumulate total attribute flips across all high-error phonemes
+attr_flip_total = Counter()
+for diffs in df_diff["Top_Attribute_Differences"]:
+    for entry in str(diffs).split(", "):
+        if "(" in entry and entry.endswith(")"):
+            attr = entry[:entry.find("(")]
+            count = int(entry[entry.find("(")+1:-1])
+            attr_flip_total[attr] += count
+
+# Convert to DataFrame for plotting
+df_attr_flips = pd.DataFrame(
+    sorted(attr_flip_total.items(), key=lambda x: x[1], reverse=True),
+    columns=["Attribute", "Flip_Count"]
+)
+
+# Plot bar chart of attribute flip frequencies
+plt.figure(figsize=(12,6))
+cmap = get_cmap("Set2")
+plt.bar(df_attr_flips["Attribute"], df_attr_flips["Flip_Count"], color=cmap.colors[:len(df_attr_flips)])
+plt.xticks(rotation=90)
+plt.ylabel("Flip Count")
+plt.title("Most Frequently Flipped Attributes in High-Error Canonical Phonemes")
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "attribute_flip_counts_high_error_phonemes (SpeechOcean).png"))
+plt.close()
+
+print("Saved: attribute_flip_counts_high_error_phonemes (SpeechOcean).png")
+
+# --- Heatmap-style stacked bar plot of attribute flips by phoneme ---
+from collections import defaultdict
+
+# Collect flip matrix: {phoneme: {attribute: count}}
+flip_matrix = defaultdict(lambda: defaultdict(int))
+for _, row in df_diff.iterrows():
+    ph = row["Phoneme"]
+    diffs = str(row["Top_Attribute_Differences"]).split(", ")
+    for entry in diffs:
+        if "(" in entry and entry.endswith(")"):
+            attr = entry[:entry.find("(")]
+            count = int(entry[entry.find("(")+1:-1])
+            flip_matrix[ph][attr] += count
+
+# Prepare matrix DataFrame
+all_attrs = sorted(set(attr for ph_diffs in flip_matrix.values() for attr in ph_diffs))
+rows = []
+for ph in df_diff["Phoneme"]:
+    row = [flip_matrix[ph].get(attr, 0) for attr in all_attrs]
+    rows.append(row)
+
+df_matrix = pd.DataFrame(rows, columns=all_attrs, index=df_diff["Phoneme"])
+
+# Plot stacked bar chart
+plt.figure(figsize=(14,7))
+bottom = np.zeros(len(df_matrix))
+for i, attr in enumerate(df_matrix.columns):
+    plt.bar(df_matrix.index, df_matrix[attr], bottom=bottom, label=attr)
+    bottom += df_matrix[attr].values
+
+plt.xticks(rotation=90)
+plt.ylabel("Flip Count")
+plt.title("Attribute Flip Breakdown per High-Error Canonical Phoneme")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "attribute_flip_stackedbar_by_phoneme (SpeechOcean).png"))
+plt.close()
+
+print("Saved: attribute_flip_stackedbar_by_phoneme (SpeechOcean).png")
