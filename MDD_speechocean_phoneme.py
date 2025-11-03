@@ -144,11 +144,10 @@ for sample in dataset:
             global_counts["CD" if pred_ph == "" else "DE"] += 1
         elif can_ph == spo_ph:
             # Correct pronunciation
+            edit_ops["match"] += 1
             if pred_ph == can_ph:
-                edit_ops["match"] += 1
                 global_counts["TA"] += 1
             else:
-                edit_ops["sub"] += 1
                 global_counts["FR"] += 1
         else:
             # Mispronunciation (substitution)
