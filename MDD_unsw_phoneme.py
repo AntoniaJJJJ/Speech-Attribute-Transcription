@@ -149,26 +149,50 @@ sample_rows = []
 # ==================== MAIN EVALUATION ====================
 
 def align_lists(ref, hyp):
-    """Return aligned phoneme pairs like align_like_cm but canonical‑driven."""
-    ops = Levenshtein.editops(" ".join(ref), " ".join(hyp))
+    """
+    Canonical-driven alignment on phoneme level.
+    Map phonemes to unique chars, run editops on chars, then map back.
+    """
+    # Build shared symbol table
+    vocab = list(set(ref + hyp))
+    char_map = {p: chr(i + 33) for i, p in enumerate(vocab)}  # avoid null/space chars
+    
+    ref_str = "".join(char_map[p] for p in ref)
+    hyp_str = "".join(char_map[p] for p in hyp)
+
+    ops = Levenshtein.editops(ref_str, hyp_str)
+
     aligned = []
     r_i = h_i = 0
+
     for op, i1, i2 in ops:
         while r_i < i1 and h_i < i2:
             aligned.append((ref[r_i], hyp[h_i]))
-            r_i += 1; h_i += 1
+            r_i += 1
+            h_i += 1
         if op == "insert":
-            aligned.append(("", hyp[i2])); h_i += 1
+            aligned.append(("", hyp[h_i]))
+            h_i += 1
         elif op == "delete":
-            aligned.append((ref[i1], "")); r_i += 1
+            aligned.append((ref[r_i], ""))
+            r_i += 1
         elif op == "replace":
-            aligned.append((ref[i1], hyp[i2])); r_i += 1; h_i += 1
+            aligned.append((ref[r_i], hyp[h_i]))
+            r_i += 1
+            h_i += 1
+
+    # tail fill
     while r_i < len(ref) and h_i < len(hyp):
-        aligned.append((ref[r_i], hyp[h_i])); r_i += 1; h_i += 1
+        aligned.append((ref[r_i], hyp[h_i]))
+        r_i += 1
+        h_i += 1
     while r_i < len(ref):
-        aligned.append((ref[r_i], "")); r_i += 1
+        aligned.append((ref[r_i], ""))
+        r_i += 1
     while h_i < len(hyp):
-        aligned.append(("", hyp[h_i])); h_i += 1
+        aligned.append(("", hyp[h_i]))
+        h_i += 1
+
     return aligned
 
 for sample in dataset:
