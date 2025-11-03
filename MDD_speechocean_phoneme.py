@@ -29,8 +29,8 @@ import Levenshtein
 
 # ==================== CONFIG ====================
 
-PREDICTED_DATASET = "/srv/scratch/z5369417/outputs/transcriber_result/combined_model_exp22_test_on_speechocean"
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_speechocean_phoneme_level_exp22"
+PREDICTED_DATASET = "/srv/scratch/z5369417/outputs/transcriber_result/cu_model_exp11_test_on_speechocean"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_speechocean_phoneme_level_exp11"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 PHONEME_CANONICAL = "phoneme_speechocean"
