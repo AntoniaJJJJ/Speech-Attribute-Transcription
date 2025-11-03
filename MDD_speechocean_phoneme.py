@@ -61,46 +61,6 @@ def decouple_diphthongs(phoneme_str, diph_map, decouple=False):
     return out
 
 
-# ==================== ALIGNMENT ====================
-
-_default_transform = tr.Compose([
-    tr.RemoveMultipleSpaces(),
-    tr.Strip(),
-    tr.ReduceToSingleSentence(),
-    tr.ReduceToListOfListOfWords(),
-])
-
-def preprocess_for_alignment(ref_str, pred_str):
-    truth = _default_transform(ref_str)[0]
-    hypothesis = _default_transform(pred_str)[0]
-    mapper = {p: i for i, p in enumerate(set(truth + hypothesis))}
-    ref_chars = "".join(chr(mapper[p]) for p in truth)
-    pred_chars = "".join(chr(mapper[p]) for p in hypothesis)
-    return truth, hypothesis, ref_chars, pred_chars
-
-
-def align_like_cm(ref_phonemes, pred_phonemes):
-    ref_str, pred_str = " ".join(ref_phonemes), " ".join(pred_phonemes)
-    ref_list, pred_list, ref_chars, pred_chars = preprocess_for_alignment(ref_str, pred_str)
-    ops = Levenshtein.editops(ref_chars, pred_chars)
-    aligned_pairs, ref_i, pred_i = [], 0, 0
-    for op, i1, i2 in ops:
-        while ref_i < i1 and pred_i < i2:
-            aligned_pairs.append((ref_list[ref_i], pred_list[pred_i]))
-            ref_i += 1; pred_i += 1
-        if op == "insert":
-            aligned_pairs.append(("", pred_list[i2])); pred_i += 1
-        elif op == "delete":
-            aligned_pairs.append((ref_list[i1], "")); ref_i += 1
-        elif op == "replace":
-            aligned_pairs.append((ref_list[i1], pred_list[i2])); ref_i += 1; pred_i += 1
-    while ref_i < len(ref_list):
-        aligned_pairs.append((ref_list[ref_i], "")); ref_i += 1
-    while pred_i < len(pred_list):
-        aligned_pairs.append(("", pred_list[pred_i])); pred_i += 1
-    return aligned_pairs
-
-
 # ==================== MAIN ====================
 
 dataset = load_from_disk(PREDICTED_DATASET)
@@ -116,65 +76,190 @@ per_op_counts = {
     "ins": Counter()
 }
 
-for s in dataset:
-    can = decouple_diphthongs(s[PHONEME_CANONICAL], diph_map, DECOUPLE_DIPH)
-    spo = decouple_diphthongs(s[PHONEME_SPOKEN], diph_map, DECOUPLE_DIPH)
-    pred = decouple_diphthongs(s[PHONEME_PREDICTED], diph_map, DECOUPLE_DIPH)
+# ==================== MAIN EVALUATION ====================
 
-    align_can, align_spo = align_like_cm(can, pred), align_like_cm(spo, pred)
+def align_lists(ref, hyp):
+    """
+    Canonical-driven alignment on phoneme level.
+    Map phonemes to unique chars, run editops on chars, then map back.
+    """
+    # Build shared symbol table
+    vocab = list(set(ref + hyp))
+    char_map = {p: chr(i + 33) for i, p in enumerate(vocab)}
+    ref_str = "".join(char_map[p] for p in ref)
+    hyp_str = "".join(char_map[p] for p in hyp)
+    ops = Levenshtein.editops(ref_str, hyp_str)
 
-    for (c, p), (_, sp) in zip(align_can, align_spo):
-        if c == '' and p != '':
+    aligned = []
+    r_i = h_i = 0
+    for op, i1, i2 in ops:
+        while r_i < i1 and h_i < i2:
+            aligned.append((ref[r_i], hyp[h_i]))
+            r_i += 1
+            h_i += 1
+        if op == "insert":
+            aligned.append(("", hyp[h_i]))
+            h_i += 1
+        elif op == "delete":
+            aligned.append((ref[r_i], ""))
+            r_i += 1
+        elif op == "replace":
+            aligned.append((ref[r_i], hyp[h_i]))
+            r_i += 1
+            h_i += 1
+    while r_i < len(ref) and h_i < len(hyp):
+        aligned.append((ref[r_i], hyp[h_i]))
+        r_i += 1
+        h_i += 1
+    while r_i < len(ref):
+        aligned.append((ref[r_i], ""))
+        r_i += 1
+    while h_i < len(hyp):
+        aligned.append(("", hyp[h_i]))
+        h_i += 1
+    return aligned
+
+for sample in dataset:
+    canonical = decouple_diphthongs(sample[PHONEME_CANONICAL], diph_map, decouple=DECOUPLE_DIPH)
+    spoken = decouple_diphthongs(sample[PHONEME_SPOKEN], diph_map, decouple=DECOUPLE_DIPH)
+    predicted = decouple_diphthongs(sample[PHONEME_PREDICTED], diph_map, decouple=DECOUPLE_DIPH)
+
+    align_truth = align_lists(canonical, spoken)
+    align_pred  = align_lists(canonical, predicted)
+
+    max_len = max(len(align_truth), len(align_pred))
+    align_truth += [("", "")] * (max_len - len(align_truth))
+    align_pred  += [("", "")] * (max_len - len(align_pred))
+
+    for (can_ph, spo_ph), (_, pred_ph) in zip(align_truth, align_pred):
+        if can_ph == "" and spo_ph != "":
+            # Insertion error
             edit_ops["ins"] += 1
             global_counts["TR"] += 1
-            if p == sp:
-                global_counts["CD"] += 1; per_op_counts["ins"]["CD"] += 1
-            else:
-                global_counts["DE"] += 1; per_op_counts["ins"]["DE"] += 1
-            per_op_counts["ins"]["TR"] += 1
-
-        elif c != '' and p == '':
+            global_counts["CD" if pred_ph == spo_ph else "DE"] += 1
+        elif can_ph != "" and spo_ph == "":
+            # Deletion error
             edit_ops["del"] += 1
             global_counts["TR"] += 1
-            if sp == '':
-                global_counts["CD"] += 1; per_op_counts["del"]["CD"] += 1
+            global_counts["CD" if pred_ph == "" else "DE"] += 1
+        elif can_ph == spo_ph:
+            # Correct pronunciation
+            if pred_ph == can_ph:
+                edit_ops["match"] += 1
+                global_counts["TA"] += 1
             else:
-                global_counts["DE"] += 1; per_op_counts["del"]["DE"] += 1
-            per_op_counts["del"]["TR"] += 1
-
-        elif c == p:
-            edit_ops["match"] += 1
-            if c == sp:
-                global_counts["TA"] += 1; per_op_counts["match"]["TA"] += 1
-            else:
-                global_counts["FA"] += 1; per_op_counts["match"]["FA"] += 1
-
+                edit_ops["sub"] += 1
+                global_counts["FR"] += 1
         else:
+            # Mispronunciation (substitution)
             edit_ops["sub"] += 1
-            if c == sp:
-                global_counts["FR"] += 1; per_op_counts["sub"]["FR"] += 1
+            if pred_ph == can_ph:
+                global_counts["FA"] += 1
             else:
-                global_counts["TR"] += 1; per_op_counts["sub"]["TR"] += 1
-                if p == sp:
-                    global_counts["CD"] += 1; per_op_counts["sub"]["CD"] += 1
+                global_counts["TR"] += 1
+                if pred_ph == spo_ph:
+                    global_counts["CD"] += 1
                 else:
-                    global_counts["DE"] += 1; per_op_counts["sub"]["DE"] += 1
+                    global_counts["DE"] += 1
 
     sample_rows.append({
-        "text": s.get("text", ""),
-        "canonical": s[PHONEME_CANONICAL],
-        "spoken": s[PHONEME_SPOKEN],
-        "predicted": s[PHONEME_PREDICTED],
+        "word": sample["word"],
+        "canonical": sample[PHONEME_CANONICAL],
+        "spoken": sample[PHONEME_SPOKEN],
+        "predicted": sample[PHONEME_PREDICTED],
     })
+
+# ==================== PER-OPERATION SUMMARY ====================
+
+# prepare per-op matrix
+per_op_counts = {
+    "match": Counter(),
+    "sub": Counter(),
+    "del": Counter(),
+    "ins": Counter()
+}
+
+# recompute counts per operation type
+for sample in dataset:
+    canonical = decouple_diphthongs(sample[PHONEME_CANONICAL], diph_map, decouple=DECOUPLE_DIPH)
+    spoken    = decouple_diphthongs(sample[PHONEME_SPOKEN],   diph_map, decouple=DECOUPLE_DIPH)
+    predicted = decouple_diphthongs(sample[PHONEME_PREDICTED],diph_map, decouple=DECOUPLE_DIPH)
+
+    # same corrected canonical-driven alignments used in main loop
+    align_truth = align_lists(canonical, spoken)
+    align_pred  = align_lists(canonical, predicted)
+
+    max_len = max(len(align_truth), len(align_pred))
+    align_truth += [("", "")] * (max_len - len(align_truth))
+    align_pred  += [("", "")] * (max_len - len(align_pred))
+
+    for (can_ph, spo_ph), (_, pred_ph) in zip(align_truth, align_pred):
+        if can_ph == "" and spo_ph != "":
+            # INSERTION error (spoken has extra phoneme)
+            op = "ins"
+            per_op_counts[op]["TR"] += 1
+            if pred_ph == spo_ph:
+                per_op_counts[op]["CD"] += 1  # Correctly diagnosed insertion
+            else:
+                per_op_counts[op]["DE"] += 1  # Misdiagnosed insertion
+
+        elif can_ph != "" and spo_ph == "":
+            # DELETION error (spoken omitted a phoneme)
+            op = "del"
+            per_op_counts[op]["TR"] += 1
+            if pred_ph == "":
+                per_op_counts[op]["CD"] += 1  # Correctly diagnosed deletion (model didn't hallucinate)
+            else:
+                per_op_counts[op]["DE"] += 1  # Model inserted phoneme incorrectly
+
+        elif can_ph == spo_ph:
+            # MATCH (correct pronunciation)
+            op = "match"
+            if pred_ph == can_ph:
+                per_op_counts[op]["TA"] += 1  # Correctly accepted
+            else:
+                per_op_counts[op]["FR"] += 1  # Wrongly rejected correct
+
+        else:
+            # SUBSTITUTION (spoken phoneme != canonical)
+            op = "sub"
+            if pred_ph == can_ph:
+                per_op_counts[op]["FA"] += 1  # Wrongly accepted mispronunciation
+            else:
+                per_op_counts[op]["TR"] += 1  # Truly rejected
+                if pred_ph == spo_ph:
+                    per_op_counts[op]["CD"] += 1  # Correct diagnosis
+                else:
+                    per_op_counts[op]["DE"] += 1  # Diagnosis error
+
+# convert to DataFrame (rows = ops, cols = metrics)
+edit_ops_perf_df = pd.DataFrame(per_op_counts).T.fillna(0).astype(int)
+# Ensure all expected columns exist, fill missing ones with 0
+for col in ["TA", "FR", "TR", "FA", "CD", "DE"]:
+    if col not in edit_ops_perf_df.columns:
+        edit_ops_perf_df[col] = 0
+
+edit_ops_perf_df = edit_ops_perf_df[["TA", "FR", "TR", "FA", "CD", "DE"]]
+
+# save to CSV
+edit_ops_perf_path = os.path.join(OUT_DIR, "edit_ops_performance.csv")
+edit_ops_perf_df.to_csv(edit_ops_perf_path)
 
 # ==================== METRICS ====================
 
-TA, FR, FA, TR, CD, DE = [global_counts[k] for k in ["TA","FR","FA","TR","CD","DE"]]
-FAR = FA / (FA + TR + 1e-8)
-FRR = FR / (FR + TA + 1e-8)
-DER = DE / (CD + DE + 1e-8)
-F1  = 2 * TA / (2 * TA + FA + FR + 1e-8)
-CDR = CD / (CD + DE + 1e-8)
+TA = global_counts["TA"]
+FR = global_counts["FR"]
+FA = global_counts["FA"]
+TR = global_counts["TR"]
+CD = global_counts["CD"]
+DE = global_counts["DE"]
+
+
+FAR = FA / (FA + TR) if (FA + TR) > 0 else 0
+FRR = FR / (FR + TA) if (FR + TA) > 0 else 0
+DER = DE / (CD + DE) if (CD + DE) > 0 else 0
+F1 = 2 * TA / (2 * TA + FA + FR) if (2 * TA + FA + FR) > 0 else 0
+CDR = CD / (CD + DE) if (CD + DE) > 0 else 0
 
 # ==================== SAVE OUTPUTS ====================
 
@@ -190,9 +275,5 @@ pd.DataFrame(sample_rows).to_csv(os.path.join(OUT_DIR, "mdd_sample_detail.csv"),
 pd.DataFrame.from_dict(edit_ops, orient="index", columns=["count"]).to_csv(
     os.path.join(OUT_DIR, "edit_ops_totals.csv"))
 
-# 4. Per-operation performance table
-edit_ops_perf_df = pd.DataFrame(per_op_counts).T.fillna(0).astype(int)
-edit_ops_perf_df = edit_ops_perf_df.reindex(columns=["TA","FR","TR","FA","CD","DE"], fill_value=0) # consistent column order
-edit_ops_perf_df.to_csv(os.path.join(OUT_DIR, "edit_ops_performance.csv"))
 
 print(f"SpeechOcean MDD complete.\nResults saved in:\n  {OUT_DIR}")
