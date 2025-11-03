@@ -434,8 +434,8 @@ for ph in high_err_phonemes:
                         diff_counter[attr_t] += 1
                         flipped_any = True
 
-            # count this phoneme occurrence (whether flipped or not)
-            total_occurrences += len(pos_list)
+        # count this phoneme occurrence (whether flipped or not)
+        total_occurrences += len(pos_list)
 
     if total_occurrences > 0:
         top_diffs = diff_counter.most_common(5)
@@ -482,3 +482,74 @@ plt.savefig(os.path.join(OUT_DIR, "top_phonemes_DER.png"))
 plt.close()
 
 print("Saved: top_phonemes_FAR.png / FRR.png / DER.png")
+
+# --- Plot per-attribute flip counts in high-error phonemes ---
+from matplotlib.cm import get_cmap
+
+# Accumulate total attribute flips across all high-error phonemes
+attr_flip_total = Counter()
+for diffs in df_diff["Top_Attribute_Differences"]:
+    for entry in str(diffs).split(", "):
+        if "(" in entry and entry.endswith(")"):
+            attr = entry[:entry.find("(")]
+            count = int(entry[entry.find("(")+1:-1])
+            attr_flip_total[attr] += count
+
+# Convert to DataFrame for plotting
+df_attr_flips = pd.DataFrame(
+    sorted(attr_flip_total.items(), key=lambda x: x[1], reverse=True),
+    columns=["Attribute", "Flip_Count"]
+)
+
+# Plot bar chart of attribute flip frequencies
+plt.figure(figsize=(12,6))
+cmap = get_cmap("Set2")
+plt.bar(df_attr_flips["Attribute"], df_attr_flips["Flip_Count"], color=cmap.colors[:len(df_attr_flips)])
+plt.xticks(rotation=90)
+plt.ylabel("Flip Count")
+plt.title("Most Frequently Flipped Attributes in High-Error Canonical Phonemes")
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "attribute_flip_counts_high_error_phonemes.png"))
+plt.close()
+
+print("Saved: attribute_flip_counts_high_error_phonemes.png")
+
+# --- Heatmap-style stacked bar plot of attribute flips by phoneme ---
+from collections import defaultdict
+
+# Collect flip matrix: {phoneme: {attribute: count}}
+flip_matrix = defaultdict(lambda: defaultdict(int))
+for _, row in df_diff.iterrows():
+    ph = row["Phoneme"]
+    diffs = str(row["Top_Attribute_Differences"]).split(", ")
+    for entry in diffs:
+        if "(" in entry and entry.endswith(")"):
+            attr = entry[:entry.find("(")]
+            count = int(entry[entry.find("(")+1:-1])
+            flip_matrix[ph][attr] += count
+
+# Prepare matrix DataFrame
+all_attrs = sorted(set(attr for ph_diffs in flip_matrix.values() for attr in ph_diffs))
+rows = []
+for ph in df_diff["Phoneme"]:
+    row = [flip_matrix[ph].get(attr, 0) for attr in all_attrs]
+    rows.append(row)
+
+df_matrix = pd.DataFrame(rows, columns=all_attrs, index=df_diff["Phoneme"])
+
+# Plot stacked bar chart
+plt.figure(figsize=(14,7))
+bottom = np.zeros(len(df_matrix))
+for i, attr in enumerate(df_matrix.columns):
+    plt.bar(df_matrix.index, df_matrix[attr], bottom=bottom, label=attr)
+    bottom += df_matrix[attr].values
+
+plt.xticks(rotation=90)
+plt.ylabel("Flip Count")
+plt.title("Attribute Flip Breakdown per High-Error Canonical Phoneme")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "attribute_flip_stackedbar_by_phoneme.png"))
+plt.close()
+
+print("Saved: attribute_flip_stackedbar_by_phoneme.png")
