@@ -137,7 +137,6 @@ for _, sample in df_mdd.iterrows():
 
         record.update({
             "word": sample.get("word", ""),
-            "speaker": sample.get("speaker", None),
         })
 
         all_records.append(record)
@@ -152,7 +151,7 @@ df_meta = df_meta.rename(columns={"text": "word"})
 
 df_phoneme_detail = df_phoneme_detail.merge(
     df_meta,
-    on=["word", "speaker"],
+    on=["word"],
     how="left"
 )
 
