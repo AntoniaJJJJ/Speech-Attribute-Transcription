@@ -148,16 +148,12 @@ df_phoneme_detail = pd.DataFrame(all_records)
 df_phoneme_detail.to_csv(os.path.join(OUT_DIR, "mdd_phoneme_expanded.csv"), index=False)
 
 # ===== Merge demographics from results DB =====
-# Results DB contains age & gender for each speaker/text
 df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
 
-# For merging: mdd file uses "text" column for word, but mdd generation named it "text"
-# So rename to standard column name used in mdd dataframe
-df_meta = df_meta.rename(columns={"text": "text"})
-
-# Merge using text + speaker
 df_phoneme_detail = df_phoneme_detail.merge(
-    df_meta, on=["text", "speaker"], how="left"
+    df_meta,
+    on=["text", "speaker"],
+    how="left"
 )
 
 # Clean missing values
