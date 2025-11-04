@@ -61,12 +61,6 @@ dataset = load_from_disk(RESULTS_DB)
 df_pred = dataset["test"].to_pandas() if "test" in dataset else dataset.to_pandas()
 df_p2a = pd.read_csv(PHONEME2ATT)
 
-# Merge demographic info from df_pred into df_mdd
-df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
-
-df_mdd = df_mdd.merge(df_meta, on="text", how="left")
-
-
 # ==================== STAGE 1: PHONEME-LEVEL SUMMARY ====================
 from collections import Counter
 import Levenshtein
@@ -153,6 +147,19 @@ for _, sample in df_mdd.iterrows():
 df_phoneme_detail = pd.DataFrame(all_records)
 df_phoneme_detail.to_csv(os.path.join(OUT_DIR, "mdd_phoneme_expanded.csv"), index=False)
 
+# ===== Merge demographics from results DB =====
+# Results DB contains age & gender for each speaker/text
+df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
+
+# For merging: mdd file uses "text" column for word, but mdd generation named it "text"
+# So rename to standard column name used in mdd dataframe
+ddf_meta = df_meta.rename(columns={"text": "word"})
+df_phoneme_detail = df_phoneme_detail.merge(df_meta, on=["word", "speaker"], how="left")
+
+# Clean missing values
+df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1).astype(int)
+df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
+
 def compute_phoneme_summary(df):
     group = df.groupby("canonical").agg({
         "TA": "sum", "FR": "sum", "FA": "sum",
@@ -218,11 +225,6 @@ plt.savefig(os.path.join(OUT_DIR, "attribute_error_rates.png"))
 plt.close()
 
 # ==================== STAGE 3: DEMOGRAPHIC ANALYSIS ====================
-# Safeguard missing demographics
-df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1).astype(int)
-df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
-
-
 # --- Aggregate metrics by age group and gender ---
 def aggregate_demographic(df, group_vars):
     metrics = ["TA", "FR", "FA", "TR", "CD", "DE"]
