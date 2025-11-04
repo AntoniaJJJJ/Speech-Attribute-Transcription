@@ -157,6 +157,7 @@ df_phoneme_detail = df_phoneme_detail.merge(
 # Clean missing values
 df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1).astype(int)
 df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
+print(df_phoneme_detail.head()[["text","speaker","age","gender"]])
 
 def compute_phoneme_summary(df):
     group = df.groupby("canonical").agg({
