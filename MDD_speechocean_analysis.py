@@ -138,8 +138,6 @@ for _, sample in df_mdd.iterrows():
         record.update({
             "text":   sample.get("text", ""),
             "speaker": sample.get("speaker", None),
-            "age":     sample.get("age", None),       
-            "gender":  sample.get("gender", None)
         })
 
         all_records.append(record)
