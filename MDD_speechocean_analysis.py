@@ -136,7 +136,7 @@ for _, sample in df_mdd.iterrows():
                 record["CD" if pred_ph == spo_ph else "DE"] = 1
 
         record.update({
-            "text":   sample.get("text", ""),
+            "word": sample.get("word", ""),
             "speaker": sample.get("speaker", None),
         })
 
@@ -148,16 +148,19 @@ df_phoneme_detail.to_csv(os.path.join(OUT_DIR, "mdd_phoneme_expanded.csv"), inde
 # ===== Merge demographics from results DB =====
 df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
 
+df_meta = df_meta.rename(columns={"text": "word"}) 
+
 df_phoneme_detail = df_phoneme_detail.merge(
     df_meta,
-    on=["text", "speaker"],
+    on=["word", "speaker"],
     how="left"
 )
 
 # Clean missing values
 df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1).astype(int)
 df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
-print(df_phoneme_detail.head()[["text","speaker","age","gender"]])
+
+print(df_phoneme_detail.head()[["word", "speaker", "age", "gender"]])
 
 def compute_phoneme_summary(df):
     group = df.groupby("canonical").agg({
