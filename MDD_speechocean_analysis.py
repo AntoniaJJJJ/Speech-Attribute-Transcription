@@ -208,15 +208,17 @@ plt.close()
 
 # ==================== STAGE 3: DEMOGRAPHIC ANALYSIS ====================
 # Get age/gender from df_pred and merge via 'text'
-df_meta = df_pred[["text", "age", "gender"]].drop_duplicates()
+df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
 
 # Join metadata with detailed phoneme results
-df_phoneme_detail = df_phoneme_detail.merge(df_meta, on="text", how="left")
+df_phoneme_detail = df_phoneme_detail.merge(
+    df_meta, on=["text", "speaker"], how="left"
+)
 
 # Safeguard missing demographics
 df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1)
 df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
-df_phoneme_detail["age_group"] = df_phoneme_detail["age"].astype(str)
+
 
 # --- Aggregate metrics by age group and gender ---
 def aggregate_demographic(df, group_vars):
@@ -227,14 +229,10 @@ def aggregate_demographic(df, group_vars):
     out["DER"] = out["DE"] / (out["CD"] + out["DE"] + 1e-8)
     return out
 
-df_demo_age = aggregate_demographic(df_phoneme_detail, ["age_group"])
-df_demo_age["age_group"] = (
-    pd.to_numeric(df_demo_age["age_group"], errors="coerce")
-    .fillna(-1)
-    .astype(int)
-)
 
-df_demo_age = df_demo_age.sort_values("age_group")
+df_demo_age = aggregate_demographic(df_phoneme_detail, ["age"])
+df_demo_age = df_demo_age.sort_values("age")
+
 df_demo_gender = aggregate_demographic(df_phoneme_detail, ["gender"])
 
 # Save summaries
@@ -243,9 +241,9 @@ df_demo_gender.to_csv(os.path.join(OUT_DIR, "mdd_gender_summary.csv"), index=Fal
 
 # --- Plot error-rate trends by age ---
 plt.figure(figsize=(8,5))
-plt.plot(df_demo_age["age_group"], df_demo_age["FAR"], marker='o', label="FAR")
-plt.plot(df_demo_age["age_group"], df_demo_age["FRR"], marker='o', label="FRR")
-plt.plot(df_demo_age["age_group"], df_demo_age["DER"], marker='o', label="DER")
+plt.plot(df_demo_age["age"], df_demo_age["FAR"], marker='o', label="FAR")
+plt.plot(df_demo_age["age"], df_demo_age["FRR"], marker='o', label="FRR")
+plt.plot(df_demo_age["age"], df_demo_age["DER"], marker='o', label="DER")
 plt.legend()
 plt.title("Error Rates by Age Group (SpeechOcean)")
 plt.ylabel("Rate")
