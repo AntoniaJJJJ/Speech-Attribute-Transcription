@@ -136,7 +136,13 @@ for _, sample in df_mdd.iterrows():
                 record["TR"] = 1
                 record["CD" if pred_ph == spo_ph else "DE"] = 1
 
-        record["text"] = sample.get("text", "")
+        record.update({
+            "text":   sample.get("text", ""),
+            "speaker": sample.get("speaker", None),
+            "age":     sample.get("age", None),       
+            "gender":  sample.get("gender", None)
+        })
+
         all_records.append(record)
 
 df_phoneme_detail = pd.DataFrame(all_records)
@@ -207,16 +213,8 @@ plt.savefig(os.path.join(OUT_DIR, "attribute_error_rates.png"))
 plt.close()
 
 # ==================== STAGE 3: DEMOGRAPHIC ANALYSIS ====================
-# Get age/gender from df_pred and merge via 'text'
-df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
-
-# Join metadata with detailed phoneme results
-df_phoneme_detail = df_phoneme_detail.merge(
-    df_meta, on=["text", "speaker"], how="left"
-)
-
 # Safeguard missing demographics
-df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1)
+df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1).astype(int)
 df_phoneme_detail["gender"] = df_phoneme_detail["gender"].fillna("unknown")
 
 
