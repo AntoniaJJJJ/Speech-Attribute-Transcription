@@ -61,6 +61,11 @@ dataset = load_from_disk(RESULTS_DB)
 df_pred = dataset["test"].to_pandas() if "test" in dataset else dataset.to_pandas()
 df_p2a = pd.read_csv(PHONEME2ATT)
 
+# Merge demographic info from df_pred into df_mdd
+df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
+
+df_mdd = df_mdd.merge(df_meta, on="text", how="left")
+
 
 # ==================== STAGE 1: PHONEME-LEVEL SUMMARY ====================
 from collections import Counter
