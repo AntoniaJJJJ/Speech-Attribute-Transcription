@@ -153,8 +153,12 @@ df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
 
 # For merging: mdd file uses "text" column for word, but mdd generation named it "text"
 # So rename to standard column name used in mdd dataframe
-ddf_meta = df_meta.rename(columns={"text": "word"})
-df_phoneme_detail = df_phoneme_detail.merge(df_meta, on=["word", "speaker"], how="left")
+df_meta = df_meta.rename(columns={"text": "text"})
+
+# Merge using text + speaker
+df_phoneme_detail = df_phoneme_detail.merge(
+    df_meta, on=["text", "speaker"], how="left"
+)
 
 # Clean missing values
 df_phoneme_detail["age"] = df_phoneme_detail["age"].fillna(-1).astype(int)
