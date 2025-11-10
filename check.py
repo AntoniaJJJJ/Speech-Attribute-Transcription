@@ -11,18 +11,16 @@ sns.set(style="whitegrid", font_scale=1.2)
 # ==================== CONFIG ====================
 CONFIG = {
     "CU Model": {
-        "RESULTS_DB": "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db",
-        "MDD_DETAIL": "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp11/mdd_sample_detail.csv",
+        "RESULTS_DB": "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_4/results_speechocean_test.db",
+        "MDD_DETAIL": "/srv/scratch/z5369417/outputs/mdd_speechocean_phoneme_level_exp11/mdd_sample_detail.csv",
     },
     "Combined Model": {
-        "RESULTS_DB": "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp22/exp22_2/results_unsw_test.db",
-        "MDD_DETAIL": "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp22/mdd_sample_detail.csv",
+        "RESULTS_DB": "/srv/scratch/z5369417/outputs/trained_result/CU_AKT_combined/exp22/exp22_3/results_speechocean_test.db",
+        "MDD_DETAIL": "/srv/scratch/z5369417/outputs/mdd_speechocean_phoneme_level_exp22/mdd_sample_detail.csv",
     },
 }
-UNSW_META = "/srv/scratch/z5369417/UNSW_final_deliverables/CAAP_2023-04-27/dataset_spreadsheet.xlsx"
-OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_unsw_demographic_compare_split"
+OUT_DIR = "/srv/scratch/z5369417/outputs/mdd_speechocean_demographic_compare"
 os.makedirs(OUT_DIR, exist_ok=True)
-
 
 # ==================== HELPERS ====================
 def align_lists(ref, hyp):
@@ -31,6 +29,7 @@ def align_lists(ref, hyp):
     ref_str = "".join(char_map[p] for p in ref)
     hyp_str = "".join(char_map[p] for p in hyp)
     ops = Levenshtein.editops(ref_str, hyp_str)
+
     aligned, r_i, h_i = [], 0, 0
     for op, i1, i2 in ops:
         while r_i < i1 and h_i < i2:
@@ -47,40 +46,31 @@ def align_lists(ref, hyp):
         aligned.append(("", hyp[h_i])); h_i += 1
     return aligned
 
-
 def aggregate_demographic(df, group_vars):
-    """Aggregate MDD metrics and compute DER."""
     metrics = ["TA", "FR", "FA", "TR", "CD", "DE"]
     out = df.groupby(group_vars)[metrics].sum().reset_index()
     out["DER"] = out["DE"] / (out["CD"] + out["DE"] + 1e-8)
     return out
-
-
-# ==================== LOAD META ====================
-meta = pd.read_excel(UNSW_META)
-meta.rename(columns={
-    "word_phonemes": "phoneme_unsw",
-    "recording_phonemes": "actual_spoken_phonemes",
-    "speech_status": "speech_status",
-    "audio_file": "audio_file",
-    "word": "word"
-}, inplace=True)
-
-meta["age_year"] = (meta["age"].astype(float) / 12).round(0).astype(int)
-meta["gender"] = meta["gender"].astype(str)
-meta["speech_status"] = meta["speech_status"].fillna(-1).astype(int)
-meta = meta[~meta["gender"].isin(["11", "11.0"])]
 
 # ==================== MAIN LOOP ====================
 records_all = []
 
 for model_name, paths in CONFIG.items():
     print(f"Processing {model_name}")
-
     df_mdd = pd.read_csv(paths["MDD_DETAIL"])
-    df = df_mdd.merge(meta[["word", "age_year", "gender", "speech_status"]],
-                      on="word", how="left")
+    dataset = load_from_disk(paths["RESULTS_DB"])
+    df_pred = dataset["test"].to_pandas() if "test" in dataset else dataset.to_pandas()
 
+    # Merge demographics
+    df_meta = df_pred[["text", "speaker", "age", "gender"]].drop_duplicates()
+    df_meta = df_meta.rename(columns={"text": "word"})
+    df_meta["age_year"] = df_meta["age"].fillna(-1).astype(int)
+    df_meta["gender"] = df_meta["gender"].fillna("unknown")
+
+    # Join MDD output with demographics
+    df = df_mdd.merge(df_meta[["word", "age_year", "gender"]], on="word", how="left")
+
+    # Expand to phoneme-level
     expanded = []
     for _, s in df.iterrows():
         can = str(s.get("canonical", "")).split()
@@ -92,7 +82,6 @@ for model_name, paths in CONFIG.items():
         for (c, sp), (_, pr) in zip(align_truth, align_pred):
             r = {"canonical": c, "spoken": sp, "predicted": pr,
                  "TA":0,"FR":0,"FA":0,"TR":0,"CD":0,"DE":0}
-            # Classification
             if c == "" and sp != "":
                 r["TR"]=1; r["CD" if pr==sp else "DE"]=1
             elif c != "" and sp == "":
@@ -108,7 +97,6 @@ for model_name, paths in CONFIG.items():
                 "word": s["word"],
                 "age_year": s["age_year"],
                 "gender": s["gender"],
-                "speech_status": s["speech_status"],
                 "model": model_name
             })
             expanded.append(r)
@@ -118,71 +106,50 @@ for model_name, paths in CONFIG.items():
 
 df_all = pd.concat(records_all, ignore_index=True)
 
-# ==================== AGE-GROUP SPLITTING ====================
-# speech_status: 1 = SSD, 0 = TD
-split_groups = {
-    "All Speakers": df_all,
-    "SSD Speakers": df_all[df_all["speech_status"] == 1],
-    "TD Speakers": df_all[df_all["speech_status"] == 0],
-}
+# ==================== DER BY AGE ====================
+df_age = aggregate_demographic(df_all, ["model", "age_year"])
+df_age = df_age.sort_values(["model", "age_year"])
 
-records = []
-for group_name, subset in split_groups.items():
-    if subset.empty:
-        continue
-    df_demo = aggregate_demographic(subset, ["model", "age_year"])
-    df_demo["Group"] = group_name
-    records.append(df_demo)
-df_age_all = pd.concat(records, ignore_index=True)
-
-# ==================== AGE PLOT FIX ====================
-fig, ax = plt.subplots(figsize=(14, 6))  # no constrained_layout
+fig, ax = plt.subplots(figsize=(10, 5))
 
 sns.lineplot(
-    data=df_age_all,
+    data=df_age,
     x="age_year", y="DER",
-    hue="Group", style="model",
-    style_order=["CU Model", "Combined Model"],
+    hue="model", style="model",
     dashes={"CU Model": "", "Combined Model": (3, 2)},
     markers=True, ax=ax
 )
 
-ax.set_title("Diagnostic Error Rate (DER) by Age (PEDZSTAR)", pad=10)
+ax.set_title("Diagnostic Error Rate (DER) by Age (SpeechOcean)", pad=10)
 ax.set_xlabel("Age (years)")
 ax.set_ylabel("DER")
 
-# Legend: inside axes, right side
 leg = ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), borderpad=0.4)
-leg.set_title(None)
-for t in leg.get_texts():
-    if t.get_text().strip().lower() == "model":
-        t.set_text("Model")
+leg.set_title("Model")
 
 sns.despine()
 fig.tight_layout()
-fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_final.png"), dpi=300, bbox_inches="tight")
+fig.savefig(os.path.join(OUT_DIR, "SO_DER_by_age_final.png"), dpi=300, bbox_inches="tight")
 plt.close(fig)
 
-
-# ==================== GENDER PLOT FIX ====================
+# ==================== DER BY GENDER ====================
 df_gender = aggregate_demographic(df_all, ["model", "gender"])
-fig, ax = plt.subplots(figsize=(12, 5))
+
+fig, ax = plt.subplots(figsize=(10, 5))
 
 sns.barplot(
-    data=df_gender, x="gender", y="DER", hue="model",
+    data=df_gender,
+    x="gender", y="DER", hue="model",
     errorbar=None, ax=ax
 )
 
-ax.set_title("Diagnostic Error Rate (DER) by Gender (PEDZSTAR)", pad=10)
+ax.set_title("Diagnostic Error Rate (DER) by Gender (SpeechOcean)", pad=10)
 ax.set_xlabel("Gender")
 ax.set_ylabel("DER")
 
-# Legend inside axes, right aligned
 leg = ax.legend(title="Model", loc="center left", bbox_to_anchor=(1.01, 0.5), borderpad=0.4)
 
 sns.despine()
 fig.tight_layout()
-fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_final.png"), dpi=300, bbox_inches="tight")
+fig.savefig(os.path.join(OUT_DIR, "SO_DER_by_gender_final.png"), dpi=300, bbox_inches="tight")
 plt.close(fig)
-
-
