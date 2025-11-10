@@ -165,6 +165,7 @@ plt.close(fig)
 
 
 # ==================== GENDER PLOT FIX ====================
+df_gender = aggregate_demographic(df_all, ["model", "gender"])
 fig, ax = plt.subplots(figsize=(12, 5))
 
 sns.barplot(
