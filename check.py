@@ -135,49 +135,57 @@ for group_name, subset in split_groups.items():
     records.append(df_demo)
 df_age_all = pd.concat(records, ignore_index=True)
 
-# ==================== PLOT AGE (6 LINES) ====================
-plt.figure(figsize=(9,6))
+# ==================== PLOT AGE (6 LINES) -- FIXED ====================
+fig, ax = plt.subplots(figsize=(9, 6))
 sns.lineplot(
     data=df_age_all,
     x="age_year", y="DER",
     hue="Group", style="model",
-    marker="o"
-)
-plt.title("Diagnostic Error Rate (DER) by Age (PEDZSTAR)")
-plt.xlabel("Age (years)")
-plt.ylabel("DER")
-
-# Move legend outside but within figure
-plt.legend(
-    title="Group / Model",
-    bbox_to_anchor=(1.02, 1),
-    loc="upper left",
-    borderaxespad=0,
-    ncol=1
+    marker="o", dashes=False, ax=ax
 )
 
-plt.tight_layout(rect=[0, 0, 0.85, 1])  # leave space for legend
-plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"), dpi=300)
-plt.close()
+ax.set_title("Diagnostic Error Rate (DER) by Age (PEDZSTAR)", pad=10)
+ax.set_xlabel("Age (years)")
+ax.set_ylabel("DER")
 
-plt.close()
+# Tidy legend: remove combined title, capitalize "Model", move to far right & span vertically
+leg = ax.legend_
+if leg is not None:
+    leg.set_title(None)  # remove "Group / Model"
+    for txt in leg.get_texts():                    # fix "model" -> "Model"
+        if txt.get_text().strip().lower() == "model":
+            txt.set_text("Model")
+    leg.set_bbox_to_anchor((1.02, 0.5))            # right side, centered vertically
+    leg.set_loc("center left")
+    leg.set_borderpad(0.4)
 
-# ==================== PLOT GENDER (2 BARS) ====================
+fig.subplots_adjust(right=0.80)  # leave room for legend
+sns.despine()
+fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"), dpi=300)
+plt.close(fig)
+
+
+# ==================== PLOT GENDER (2 BARS) -- FIXED ====================
 df_gender = aggregate_demographic(df_all, ["model", "gender"])
-plt.figure(figsize=(6,5))
-sns.barplot(data=df_gender, x="gender", y="DER", hue="model", errorbar=None)
-plt.title("Diagnostic Error Rate (DER) by Gender — PEDZSTAR")
-plt.xlabel("Gender")
-plt.ylabel("DER")
 
-plt.legend(
-    title="Model",
-    bbox_to_anchor=(1.02, 1),
-    loc="upper left",
-    borderaxespad=0
+fig, ax = plt.subplots(figsize=(6, 5))
+sns.barplot(
+    data=df_gender,
+    x="gender", y="DER", hue="model",
+    errorbar=None, ax=ax
 )
 
-plt.tight_layout(rect=[0, 0, 0.85, 1])
-plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"), dpi=300)
-plt.close()
+ax.set_title("Diagnostic Error Rate (DER) by Gender (PEDZSTAR)", pad=10)
+ax.set_xlabel("Gender")
+ax.set_ylabel("DER")
 
+# Legend to far right, spanning vertically
+leg = ax.legend(title="Model")
+leg.set_bbox_to_anchor((1.02, 0.5))
+leg.set_loc("center left")
+leg.set_borderpad(0.4)
+
+fig.subplots_adjust(right=0.80)  # ensure title stays inside & room for legend
+sns.despine()
+fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"), dpi=300)
+plt.close(fig)
