@@ -135,41 +135,42 @@ for group_name, subset in split_groups.items():
     records.append(df_demo)
 df_age_all = pd.concat(records, ignore_index=True)
 
-# ==================== PLOT AGE (6 LINES) -- FINAL FIX ====================
-fig, ax = plt.subplots(figsize=(9, 6))
+# ==================== PLOT AGE (6 LINES) -- FINAL POLISHED ====================
+fig, ax = plt.subplots(figsize=(10.5, 6))  # widened figure
 sns.lineplot(
     data=df_age_all,
     x="age_year", y="DER",
     hue="Group", style="model",
-    marker="o", dashes=False, ax=ax
+    style_order=["CU Model", "Combined Model"],  # consistent styling
+    dashes={"CU Model": "", "Combined Model": (3, 2)},  # CU solid, Combined dashed
+    markers=True, ax=ax
 )
 
 ax.set_title("Diagnostic Error Rate (DER) by Age (PEDZSTAR)", pad=10)
 ax.set_xlabel("Age (years)")
 ax.set_ylabel("DER")
 
-# Clean legend: remove "Group / Model", rename "model" to "Model", place right side vertically centered
 leg = ax.legend_
 if leg is not None:
-    leg.set_title(None)  # remove "Group / Model"
+    leg.set_title(None)
     for txt in leg.get_texts():
         if txt.get_text().strip().lower() == "model":
             txt.set_text("Model")
     leg._legend_box.align = "left"
-    leg.set_bbox_to_anchor((1.02, 0.5))
+    leg.set_bbox_to_anchor((1.05, 0.5))   # slightly closer than before
     leg.set_loc("center left")
-    leg.borderpad = 0.4  # fixed (assign directly)
+    leg.borderpad = 0.4
 
-fig.subplots_adjust(right=0.80)  # reserve space for legend
+fig.subplots_adjust(right=0.85)  # leave sufficient margin for legend
 sns.despine()
-fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"), dpi=300)
+fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_final.png"), dpi=300)
 plt.close(fig)
 
 
-# ==================== PLOT GENDER (2 BARS) -- FINAL FIX ====================
+# ==================== PLOT GENDER (2 BARS) -- FINAL POLISHED ====================
 df_gender = aggregate_demographic(df_all, ["model", "gender"])
 
-fig, ax = plt.subplots(figsize=(6, 5))
+fig, ax = plt.subplots(figsize=(7.5, 5))  # slightly wider
 sns.barplot(
     data=df_gender,
     x="gender", y="DER", hue="model",
@@ -181,11 +182,11 @@ ax.set_xlabel("Gender")
 ax.set_ylabel("DER")
 
 leg = ax.legend(title="Model")
-leg.set_bbox_to_anchor((1.02, 0.5))
+leg.set_bbox_to_anchor((1.05, 0.5))
 leg.set_loc("center left")
-leg.borderpad = 0.4  # fixed (assign directly)
+leg.borderpad = 0.4
 
-fig.subplots_adjust(right=0.80)  # prevent title cutoff, leave space for legend
+fig.subplots_adjust(right=0.85)
 sns.despine()
-fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"), dpi=300)
+fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_final.png"), dpi=300)
 plt.close(fig)
