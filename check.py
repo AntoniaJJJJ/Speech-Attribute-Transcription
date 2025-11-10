@@ -135,7 +135,7 @@ for group_name, subset in split_groups.items():
     records.append(df_demo)
 df_age_all = pd.concat(records, ignore_index=True)
 
-# ==================== PLOT AGE (6 LINES) -- FIXED ====================
+# ==================== PLOT AGE (6 LINES) -- FINAL FIX ====================
 fig, ax = plt.subplots(figsize=(9, 6))
 sns.lineplot(
     data=df_age_all,
@@ -148,24 +148,25 @@ ax.set_title("Diagnostic Error Rate (DER) by Age (PEDZSTAR)", pad=10)
 ax.set_xlabel("Age (years)")
 ax.set_ylabel("DER")
 
-# Tidy legend: remove combined title, capitalize "Model", move to far right & span vertically
+# Clean legend: remove "Group / Model", rename "model" to "Model", place right side vertically centered
 leg = ax.legend_
 if leg is not None:
     leg.set_title(None)  # remove "Group / Model"
-    for txt in leg.get_texts():                    # fix "model" -> "Model"
+    for txt in leg.get_texts():
         if txt.get_text().strip().lower() == "model":
             txt.set_text("Model")
-    leg.set_bbox_to_anchor((1.02, 0.5))            # right side, centered vertically
+    leg._legend_box.align = "left"
+    leg.set_bbox_to_anchor((1.02, 0.5))
     leg.set_loc("center left")
-    leg.set_borderpad(0.4)
+    leg.borderpad = 0.4  # fixed (assign directly)
 
-fig.subplots_adjust(right=0.80)  # leave room for legend
+fig.subplots_adjust(right=0.80)  # reserve space for legend
 sns.despine()
 fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"), dpi=300)
 plt.close(fig)
 
 
-# ==================== PLOT GENDER (2 BARS) -- FIXED ====================
+# ==================== PLOT GENDER (2 BARS) -- FINAL FIX ====================
 df_gender = aggregate_demographic(df_all, ["model", "gender"])
 
 fig, ax = plt.subplots(figsize=(6, 5))
@@ -179,13 +180,12 @@ ax.set_title("Diagnostic Error Rate (DER) by Gender (PEDZSTAR)", pad=10)
 ax.set_xlabel("Gender")
 ax.set_ylabel("DER")
 
-# Legend to far right, spanning vertically
 leg = ax.legend(title="Model")
 leg.set_bbox_to_anchor((1.02, 0.5))
 leg.set_loc("center left")
-leg.set_borderpad(0.4)
+leg.borderpad = 0.4  # fixed (assign directly)
 
-fig.subplots_adjust(right=0.80)  # ensure title stays inside & room for legend
+fig.subplots_adjust(right=0.80)  # prevent title cutoff, leave space for legend
 sns.despine()
 fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"), dpi=300)
 plt.close(fig)
