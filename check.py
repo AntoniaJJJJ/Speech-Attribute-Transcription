@@ -143,7 +143,7 @@ sns.lineplot(
     hue="Group", style="model",
     marker="o"
 )
-plt.title("Diagnostic Error Rate (DER) by Age — PEDZSTAR")
+plt.title("Diagnostic Error Rate (DER) by Age (PEDZSTAR)")
 plt.xlabel("Age (years)")
 plt.ylabel("DER")
 
@@ -160,7 +160,10 @@ plt.tight_layout(rect=[0, 0, 0.85, 1])  # leave space for legend
 plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"), dpi=300)
 plt.close()
 
+plt.close()
+
 # ==================== PLOT GENDER (2 BARS) ====================
+df_gender = aggregate_demographic(df_all, ["model", "gender"])
 plt.figure(figsize=(6,5))
 sns.barplot(data=df_gender, x="gender", y="DER", hue="model", errorbar=None)
 plt.title("Diagnostic Error Rate (DER) by Gender — PEDZSTAR")
@@ -177,3 +180,4 @@ plt.legend(
 plt.tight_layout(rect=[0, 0, 0.85, 1])
 plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"), dpi=300)
 plt.close()
+
