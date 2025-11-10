@@ -11,7 +11,7 @@ sns.set(style="whitegrid", font_scale=1.2)
 # ==================== CONFIG ====================
 CONFIG = {
     "CU Model": {
-        "RESULTS_DB": "/srv/scratch/z5369417/outputs/trained_result/CU_only/exp11/results_unsw_test.db",
+        "RESULTS_DB": "/srv/scratch/z5369417/outputs/trained_result/cu/exp11/exp11_5/results_unsw_test.db",
         "MDD_DETAIL": "/srv/scratch/z5369417/outputs/mdd_unsw_phoneme_level_exp11/mdd_sample_detail.csv",
     },
     "Combined Model": {
