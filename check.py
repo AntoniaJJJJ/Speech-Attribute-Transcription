@@ -65,8 +65,10 @@ meta.rename(columns={
     "audio_file": "audio_file",
     "word": "word"
 }, inplace=True)
+
 meta["age_year"] = (meta["age"].astype(float) / 12).round(0).astype(int)
-meta["gender"] = meta["gender"].astype(str).str.capitalize()
+meta["gender"] = meta["gender"].astype(str)
+meta["speech_status"] = meta["speech_status"].fillna(-1).astype(int)
 meta = meta[~meta["gender"].isin(["11", "11.0"])]
 
 # ==================== MAIN LOOP ====================
@@ -117,15 +119,17 @@ for model_name, paths in CONFIG.items():
 df_all = pd.concat(records_all, ignore_index=True)
 
 # ==================== AGE-GROUP SPLITTING ====================
-# 3 groups: All, SSD, Typical × 2 models = 6 lines total
+# speech_status: 1 = SSD, 0 = TD
 split_groups = {
     "All Speakers": df_all,
-    "SSD Speakers": df_all[df_all["speech_status"].astype(str).str.lower().eq("ssd")],
-    "Typical Speakers": df_all[df_all["speech_status"].astype(str).str.lower().str.contains("typical")]
+    "SSD Speakers": df_all[df_all["speech_status"] == 1],
+    "TD Speakers": df_all[df_all["speech_status"] == 0],
 }
 
 records = []
 for group_name, subset in split_groups.items():
+    if subset.empty:
+        continue
     df_demo = aggregate_demographic(subset, ["model", "age_year"])
     df_demo["Group"] = group_name
     records.append(df_demo)
@@ -133,13 +137,18 @@ df_age_all = pd.concat(records, ignore_index=True)
 
 # ==================== PLOT AGE (6 LINES) ====================
 plt.figure(figsize=(9,6))
-sns.lineplot(data=df_age_all, x="age_year", y="DER", hue="Group", style="model", marker="o")
+sns.lineplot(
+    data=df_age_all,
+    x="age_year", y="DER",
+    hue="Group", style="model",
+    marker="o"
+)
 plt.title("Diagnostic Error Rate (DER) by Age — PEDZSTAR")
 plt.xlabel("Age (years)")
 plt.ylabel("DER")
 plt.legend(title="Group / Model", loc="upper right", ncol=2)
 plt.tight_layout()
-plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split.png"))
+plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"))
 plt.close()
 
 # ==================== PLOT GENDER (2 BARS) ====================
@@ -151,7 +160,7 @@ plt.xlabel("Gender")
 plt.ylabel("DER")
 plt.legend(title="Model", loc="upper right")
 plt.tight_layout()
-plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender.png"))
+plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"))
 plt.close()
 
-print(f"Saved plots to {OUT_DIR}")
+print(f"✅ Saved plots to {OUT_DIR}")
