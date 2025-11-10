@@ -146,21 +146,34 @@ sns.lineplot(
 plt.title("Diagnostic Error Rate (DER) by Age — PEDZSTAR")
 plt.xlabel("Age (years)")
 plt.ylabel("DER")
-plt.legend(title="Group / Model", loc="upper right", ncol=2)
-plt.tight_layout()
-plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"))
+
+# Move legend outside but within figure
+plt.legend(
+    title="Group / Model",
+    bbox_to_anchor=(1.02, 1),
+    loc="upper left",
+    borderaxespad=0,
+    ncol=1
+)
+
+plt.tight_layout(rect=[0, 0, 0.85, 1])  # leave space for legend
+plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_fixed.png"), dpi=300)
 plt.close()
 
 # ==================== PLOT GENDER (2 BARS) ====================
-df_gender = aggregate_demographic(df_all, ["model", "gender"])
 plt.figure(figsize=(6,5))
 sns.barplot(data=df_gender, x="gender", y="DER", hue="model", errorbar=None)
 plt.title("Diagnostic Error Rate (DER) by Gender — PEDZSTAR")
 plt.xlabel("Gender")
 plt.ylabel("DER")
-plt.legend(title="Model", loc="upper right")
-plt.tight_layout()
-plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"))
-plt.close()
 
-print(f"✅ Saved plots to {OUT_DIR}")
+plt.legend(
+    title="Model",
+    bbox_to_anchor=(1.02, 1),
+    loc="upper left",
+    borderaxespad=0
+)
+
+plt.tight_layout(rect=[0, 0, 0.85, 1])
+plt.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_fixed.png"), dpi=300)
+plt.close()
