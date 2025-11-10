@@ -135,8 +135,8 @@ for group_name, subset in split_groups.items():
     records.append(df_demo)
 df_age_all = pd.concat(records, ignore_index=True)
 
-# ==================== AGE (6 LINES) — LEGEND 100% INSIDE ====================
-fig, ax = plt.subplots(figsize=(14, 6), constrained_layout=True)  # wider + auto layout
+# ==================== AGE PLOT FIX ====================
+fig, ax = plt.subplots(figsize=(14, 6))  # no constrained_layout
 
 sns.lineplot(
     data=df_age_all,
@@ -151,27 +151,21 @@ ax.set_title("Diagnostic Error Rate (DER) by Age (PEDZSTAR)", pad=10)
 ax.set_xlabel("Age (years)")
 ax.set_ylabel("DER")
 
-# Legend: inside the figure, right side, vertically centered
-leg = ax.legend_
-if leg is not None:
-    leg.set_title(None)  # remove "Group / Model"
-    for t in leg.get_texts():
-        if t.get_text().strip().lower() == "model":
-            t.set_text("Model")
-    leg.set_loc("center left")
-    # Anchor in FIGURE coords (not axes), 0.98 keeps it fully inside the frame
-    leg.set_bbox_to_anchor((0.98, 0.5), transform=fig.transFigure)
-    leg.borderpad = 0.4
+# Legend: inside axes, right side
+leg = ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), borderpad=0.4)
+leg.set_title(None)
+for t in leg.get_texts():
+    if t.get_text().strip().lower() == "model":
+        t.set_text("Model")
 
 sns.despine()
-fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_final.png"), dpi=300)
+fig.tight_layout()
+fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_age_split_final.png"), dpi=300, bbox_inches="tight")
 plt.close(fig)
 
 
-# ==================== GENDER (2 BARS) — LEGEND 100% INSIDE ====================
-df_gender = aggregate_demographic(df_all, ["model", "gender"])
-
-fig, ax = plt.subplots(figsize=(12, 5), constrained_layout=True)
+# ==================== GENDER PLOT FIX ====================
+fig, ax = plt.subplots(figsize=(12, 5))
 
 sns.barplot(
     data=df_gender, x="gender", y="DER", hue="model",
@@ -182,12 +176,12 @@ ax.set_title("Diagnostic Error Rate (DER) by Gender (PEDZSTAR)", pad=10)
 ax.set_xlabel("Gender")
 ax.set_ylabel("DER")
 
-leg = ax.legend(title="Model")
-leg.set_loc("center left")
-leg.set_bbox_to_anchor((0.98, 0.5), transform=fig.transFigure)  # fully inside
-leg.borderpad = 0.4
+# Legend inside axes, right aligned
+leg = ax.legend(title="Model", loc="center left", bbox_to_anchor=(1.01, 0.5), borderpad=0.4)
 
 sns.despine()
-fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_final.png"), dpi=300)
+fig.tight_layout()
+fig.savefig(os.path.join(OUT_DIR, "PS_DER_by_gender_final.png"), dpi=300, bbox_inches="tight")
 plt.close(fig)
+
 
